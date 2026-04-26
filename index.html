@@ -850,13 +850,43 @@ function aplicarFiltros() {
 }
 
 function initMap() {
-  // maxZoom 19 = limite seguro do Esri para nao retornar 404 (tile not found)
-  map = L.map('map', { preferCanvas: true, maxZoom: 19 }).setView([-20.520, -49.330], 17);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Esri, Maxar, Earthstar Geographics',
+  map = L.map('map', { preferCanvas: true, maxZoom: 20 }).setView([-20.520, -49.330], 17);
+
+  // Google Satellite (imagem atual, mostra a usina construida)
+  const googleSat = L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    subdomains: ['0','1','2','3'],
+    attribution: 'Google Maps',
+    maxZoom: 20,
+    maxNativeZoom: 20
+  });
+
+  // Esri (fallback - imagem mais antiga mas universal)
+  const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Esri',
     maxZoom: 19,
     maxNativeZoom: 18
-  }).addTo(map);
+  });
+
+  // Tenta Google primeiro; se mais de 3 tiles falharem, troca para Esri automatico
+  let switched = false;
+  let errorCount = 0;
+  googleSat.on('tileerror', () => {
+    errorCount++;
+    if (errorCount > 3 && !switched) {
+      console.warn('Google tiles falhando, alternando para Esri (imagem antiga)');
+      switched = true;
+      map.removeLayer(googleSat);
+      esriSat.addTo(map);
+    }
+  });
+  googleSat.addTo(map);
+
+  // Layer control para usuario alternar manualmente
+  L.control.layers({
+    'Satelite (Google - atual)': googleSat,
+    'Satelite (Esri - antigo)': esriSat
+  }, null, { position: 'topright' }).addTo(map);
+
   markersCluster = L.markerClusterGroup({
     maxClusterRadius: 30,
     spiderfyOnMaxZoom: true,
@@ -864,7 +894,6 @@ function initMap() {
     disableClusteringAtZoom: 19
   });
   map.addLayer(markersCluster);
-  // Garante que o mapa redimensione corretamente apos primeiro render
   setTimeout(() => map.invalidateSize(), 200);
 }
 
@@ -900,7 +929,7 @@ function renderMap() {
     markersCluster.addLayer(marker);
     markerById[d.id] = marker;
   });
-  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
   document.getElementById('map-count').textContent = `(${filtered.length} pontos)`;
 }
 
@@ -1015,7 +1044,7 @@ function renderTable() {
       if (m) {
         markersCluster.zoomToShowLayer(m, () => {
           m.openPopup();
-          map.setView(m.getLatLng(), 19);
+          map.setView(m.getLatLng(), 20);
         });
         document.querySelectorAll('tbody tr').forEach(t => t.classList.remove('selected'));
         tr.classList.add('selected');
