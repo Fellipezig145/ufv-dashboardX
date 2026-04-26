@@ -308,6 +308,7 @@ if (location.protocol === 'file:') {
   <div class="tab active" data-tab="geral">Visao Geral</div>
   <div class="tab" data-tab="performance">Performance e Impacto</div>
   <div class="tab" data-tab="campo">Correcoes de Campo</div>
+  <div class="tab" data-tab="detalhes">Detalhes Corrigidos</div>
   <div class="tab" data-tab="qgis">Mapa QGIS</div>
 </div>
 
@@ -564,6 +565,76 @@ if (location.protocol === 'file:') {
   </div>
 </div>
 
+<div class="tab-content" id="tab-detalhes">
+  <div class="card" style="margin-bottom:24px">
+    <h2>Resumo das Correcoes Executadas</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px" id="det-resumo"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Atividades Executadas</h2>
+      <div class="chart-wrap" style="height:280px"><canvas id="chartDetAtividades"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Correcoes por Equipe</h2>
+      <div class="chart-wrap" style="height:280px"><canvas id="chartDetEquipes"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h2>Detalhamento das Correcoes</h2>
+    <div class="filters" style="margin-bottom:12px">
+      <label>Atividade:</label>
+      <select id="f-det-atividade">
+        <option value="">Todas</option>
+        <option value="reparo">Reparo no modulo</option>
+        <option value="substituicao">Substituicao</option>
+      </select>
+      <label>Equipe:</label>
+      <select id="f-det-equipe"><option value="">Todas</option></select>
+      <label>Data de:</label>
+      <input id="f-det-data-de" type="date" style="width:140px">
+      <label>ate:</label>
+      <input id="f-det-data-ate" type="date" style="width:140px">
+      <button id="reset-det">Limpar</button>
+      <button id="exportar-det" style="background:#10b981;color:#fff">Exportar CSV</button>
+      <span id="det-contador" style="margin-left:auto;opacity:0.7"></span>
+    </div>
+    <div class="table-wrap" style="max-height:600px">
+      <table>
+        <thead><tr>
+          <th>ID</th>
+          <th>Tipo Anomalia</th>
+          <th>Modulo</th>
+          <th>String</th>
+          <th>Inversor</th>
+          <th>Skid</th>
+          <th>Atividade</th>
+          <th>Equipe</th>
+          <th>S/N Antigo</th>
+          <th>S/N Novo</th>
+          <th>Data</th>
+          <th>Problema Identificado</th>
+        </tr></thead>
+        <tbody id="det-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h2>Como preencher na planilha</h2>
+    <div class="formula-note">
+      Para os <b>Detalhes Corrigidos</b> aparecerem aqui automaticamente, a equipe deve preencher na aba <b>Equipe Campo</b> da planilha as colunas adicionais:<br><br>
+      &bull; <b>Equipe</b>: nome ou ID da equipe que executou (ex: "Equipe Alpha", "Joao + Carlos")<br>
+      &bull; <b>SN Antigo</b>: numero de serie do modulo antigo (substituido)<br>
+      &bull; <b>SN Novo</b>: numero de serie do modulo novo<br>
+      &bull; <b>Atividade</b>: "Reparo no modulo" ou "Substituicao"<br><br>
+      O site reconhece colunas com esses nomes (com ou sem acentos/espacos extras). Apos a equipe preencher na planilha do Drive, o site atualiza automaticamente em ate 1 minuto.
+    </div>
+  </div>
+</div>
+
 <div class="tab-content" id="tab-qgis">
   <div class="card" style="margin-bottom:24px">
     <h2>Mapa Tecnico (Layers QGIS)</h2>
@@ -809,10 +880,16 @@ async function sincronizarComSheets() {
         const a = byId[id];
         if (!a) return;
         for (const k in r) {
-          const kl = k.trim().toLowerCase();
+          const kl = k.trim().toLowerCase()
+            .replace(/[áàâã]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i')
+            .replace(/[óôõ]/g,'o').replace(/[úû]/g,'u').replace(/ç/g,'c');
           if (kl === 'status') a.status = r[k] || null;
           else if (kl.startsWith('data')) a.data_correcao = r[k] || null;
           else if (kl.startsWith('problema')) a.problema = r[k] || null;
+          else if (kl.startsWith('equipe')) a.equipe = r[k] || null;
+          else if (kl.includes('atividade') || kl.includes('executada')) a.atividade = r[k] || null;
+          else if ((kl.includes('serie') || kl === 'sn' || kl.startsWith('sn ')) && (kl.includes('antig') || kl.includes('old'))) a.sn_antigo = r[k] || null;
+          else if ((kl.includes('serie') || kl === 'sn' || kl.startsWith('sn ')) && (kl.includes('nov') || kl.includes('new'))) a.sn_novo = r[k] || null;
         }
       });
 
@@ -2083,6 +2160,239 @@ _origTabHandler.forEach(tab => {
     }
   });
 });
+
+
+
+// ============ ABA DETALHES CORRIGIDOS ============
+let chartDetAtividades = null, chartDetEquipes = null;
+
+function getCorrigidos() {
+  if (!usinaAtual) return [];
+  return usinaAtual.anomalias.filter(a => {
+    const n = normalizeStatus(a.status);
+    return n.includes('resolv');
+  });
+}
+
+function aplicarFiltrosDet(items) {
+  const at = (document.getElementById('f-det-atividade').value || '').toLowerCase();
+  const eq = (document.getElementById('f-det-equipe').value || '');
+  const dDe = document.getElementById('f-det-data-de').value;
+  const dAte = document.getElementById('f-det-data-ate').value;
+  return items.filter(d => {
+    if (at) {
+      const a = (d.atividade||'').toLowerCase();
+      if (at === 'reparo' && !a.includes('repar')) return false;
+      if (at === 'substituicao' && !a.includes('substit')) return false;
+    }
+    if (eq && d.equipe !== eq) return false;
+    if (dDe || dAte) {
+      const dc = String(d.data_correcao||'').slice(0,10);
+      if (!dc) return false;
+      if (dDe && dc < dDe) return false;
+      if (dAte && dc > dAte) return false;
+    }
+    return true;
+  });
+}
+
+function renderDetalhes() {
+  if (!usinaAtual) return;
+  const corrigidos = getCorrigidos();
+
+  // Popular dropdown de equipes
+  const equipes = [...new Set(corrigidos.map(c => c.equipe).filter(Boolean))].sort();
+  const sel = document.getElementById('f-det-equipe');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Todas</option>' + equipes.map(e => '<option value="'+e+'">'+e+'</option>').join('');
+    sel.value = cur;
+  }
+
+  const filt = aplicarFiltrosDet(corrigidos);
+
+  // Resumo
+  const totalCorr = corrigidos.length;
+  const reparos = corrigidos.filter(c => (c.atividade||'').toLowerCase().includes('repar')).length;
+  const subs = corrigidos.filter(c => (c.atividade||'').toLowerCase().includes('substit')).length;
+  const semAtividade = totalCorr - reparos - subs;
+  const equipesUnicas = equipes.length;
+
+  document.getElementById('det-resumo').innerHTML =
+    '<div class="stat ok" style="margin:0"><div class="label">Total Corrigidos</div><div class="value">'+totalCorr+'</div><div class="sub">de '+usinaAtual.anomalias.length+'</div></div>' +
+    '<div class="stat" style="margin:0;border-left-color:#06b6d4"><div class="label">Reparos no modulo</div><div class="value">'+reparos+'</div></div>' +
+    '<div class="stat" style="margin:0;border-left-color:#f59e0b"><div class="label">Substituicoes</div><div class="value">'+subs+'</div></div>' +
+    '<div class="stat" style="margin:0;border-left-color:#94a3b8"><div class="label">Equipes envolvidas</div><div class="value">'+equipesUnicas+'</div></div>' +
+    (semAtividade > 0 ? '<div class="stat warn" style="margin:0"><div class="label">Sem detalhe atividade</div><div class="value">'+semAtividade+'</div></div>' : '');
+
+  // Charts
+  if (chartDetAtividades) chartDetAtividades.destroy();
+  chartDetAtividades = new Chart(document.getElementById('chartDetAtividades'), {
+    type: 'doughnut',
+    data: { labels: ['Reparos', 'Substituicoes', 'Sem detalhe'],
+            datasets: [{ data: [reparos, subs, semAtividade],
+                        backgroundColor: ['#06b6d4','#f59e0b','#94a3b8'] }]},
+    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth:12, font:{size:11}}}}, maintainAspectRatio: false,
+               onClick: (e,els) => { if(els.length){ const lbl = chartDetAtividades.data.labels[els[0].index]; document.getElementById('f-det-atividade').value = lbl==='Reparos'?'reparo':lbl==='Substituicoes'?'substituicao':''; renderDetalhes(); }}}
+  });
+
+  // Por equipe
+  const porEquipe = {};
+  corrigidos.forEach(c => { const e = c.equipe || 'Sem equipe'; porEquipe[e] = (porEquipe[e]||0)+1; });
+  const sortedEq = Object.entries(porEquipe).sort((a,b)=>b[1]-a[1]);
+  if (chartDetEquipes) chartDetEquipes.destroy();
+  chartDetEquipes = new Chart(document.getElementById('chartDetEquipes'), {
+    type: 'bar',
+    data: { labels: sortedEq.map(x=>x[0]), datasets: [{ data: sortedEq.map(x=>x[1]), backgroundColor: '#10b981' }]},
+    options: { indexAxis: 'y', plugins: { legend: { display: false }}, scales: { x: { beginAtZero: true }}, maintainAspectRatio: false,
+               onClick: (e,els) => { if(els.length){ const lbl = chartDetEquipes.data.labels[els[0].index]; document.getElementById('f-det-equipe').value = lbl === 'Sem equipe' ? '' : lbl; renderDetalhes(); }}}
+  });
+
+  // Tabela
+  const tbody = document.getElementById('det-tbody');
+  tbody.innerHTML = filt.length ? filt.map(d => {
+    const cls = ANOMALIA_CLASS[d.anomalia] || '';
+    const atColor = (d.atividade||'').toLowerCase().includes('substit') ? '#f59e0b' : (d.atividade||'').toLowerCase().includes('repar') ? '#06b6d4' : '#94a3b8';
+    return '<tr>' +
+      '<td><b>'+d.id+'</b></td>' +
+      '<td><span class="badge '+cls+'">'+(d.anomalia||'')+'</span></td>' +
+      '<td>'+(d.modulo||'')+'</td>' +
+      '<td class="mono" style="font-size:11px">'+(d.string||'')+'</td>' +
+      '<td>'+(d.inversor||'')+'</td>' +
+      '<td>'+(d.skid||'')+'</td>' +
+      '<td><span style="background:'+atColor+';color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">'+(d.atividade||'-')+'</span></td>' +
+      '<td>'+(d.equipe||'-')+'</td>' +
+      '<td class="mono" style="font-size:11px">'+(d.sn_antigo||'-')+'</td>' +
+      '<td class="mono" style="font-size:11px">'+(d.sn_novo||'-')+'</td>' +
+      '<td class="mono" style="font-size:11px">'+(d.data_correcao||'-')+'</td>' +
+      '<td style="font-size:12px;max-width:280px;white-space:normal">'+(d.problema||'')+'</td>' +
+    '</tr>';
+  }).join('') : '<tr><td colspan="12" style="text-align:center;padding:30px;opacity:0.5">Nenhuma correcao executada ainda. A equipe deve marcar Status="Resolvido" na aba Equipe Campo.</td></tr>';
+
+  document.getElementById('det-contador').textContent = 'Mostrando ' + filt.length + ' de ' + totalCorr;
+}
+
+// Listeners da aba detalhes
+document.addEventListener('DOMContentLoaded', () => {
+  ['f-det-atividade','f-det-equipe','f-det-data-de','f-det-data-ate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', renderDetalhes);
+  });
+  const reset = document.getElementById('reset-det');
+  if (reset) reset.addEventListener('click', () => {
+    ['f-det-atividade','f-det-equipe','f-det-data-de','f-det-data-ate'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    renderDetalhes();
+  });
+  const exp = document.getElementById('exportar-det');
+  if (exp) exp.addEventListener('click', exportarDetalhesCSV);
+});
+
+function exportarDetalhesCSV() {
+  const items = aplicarFiltrosDet(getCorrigidos());
+  const headers = ['ID','Tipo','Modulo','String','Tracker','Inversor','Skid','Atividade','Equipe','SN Antigo','SN Novo','Data Correcao','Problema','TempMax','Delta','Lat','Lng'];
+  const rows = items.map(d => [d.id,d.anomalia,d.modulo,d.string,d.tracker,d.inversor,d.skid,d.atividade,d.equipe,d.sn_antigo,d.sn_novo,d.data_correcao,d.problema,d.temp_max,d.delta,d.lat,d.lng]);
+  const csv = [headers.join(','), ...rows.map(r => r.map(v => '"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(','))].join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'detalhes_corrigidos_'+(new Date().toISOString().slice(0,10))+'.csv';
+  a.click();
+}
+
+// Hook tab change para renderizar
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.dataset.tab === 'detalhes') setTimeout(renderDetalhes, 50);
+  });
+});
+
+// ============ INTERATIVIDADE - Performance e Correcoes ============
+function ativarInteratividade() {
+  // Performance: click em barras de inversor/skid -> filtra Visao Geral
+  if (chartInv) {
+    chartInv.options.onClick = (e,els) => {
+      if (!els.length) return;
+      const lbl = chartInv.data.labels[els[0].index];
+      irParaGeral('f-inversor', lbl);
+    };
+  }
+
+  // Campo: click em chartCampoTipos -> filtra status na aba campo
+  if (typeof chartCampoTipos !== 'undefined' && chartCampoTipos) {
+    chartCampoTipos.options.onClick = (e,els) => {
+      if (!els.length) return;
+      const tipo = chartCampoTipos.data.labels[els[0].index];
+      const dataset = chartCampoTipos.data.datasets[els[0].datasetIndex];
+      const statusKey = dataset.label === 'Resolvidas' ? 'resolvido' : dataset.label === 'Em andamento' ? 'em andamento' : dataset.label === 'Pendente' ? 'pendente' : dataset.label === 'Nao procede' ? 'nao procede' : '';
+      document.getElementById('f-campo-status').value = statusKey;
+      renderCampoTable();
+    };
+  }
+  if (typeof chartCampoInv !== 'undefined' && chartCampoInv) {
+    chartCampoInv.options.onClick = (e,els) => {
+      if (!els.length) return;
+      const inv = chartCampoInv.data.labels[els[0].index];
+      irParaGeral('f-inversor', inv);
+    };
+  }
+}
+
+function irParaGeral(filterId, value) {
+  // Vai pra aba Visao Geral
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('.tab[data-tab="geral"]').classList.add('active');
+  document.getElementById('tab-geral').classList.add('active');
+  // Aplica filtro
+  document.getElementById(filterId).value = value;
+  aplicarFiltros();
+  if (map) setTimeout(() => map.invalidateSize(), 100);
+  document.querySelector('.stats-grid').scrollIntoView({behavior:'smooth'});
+}
+
+// Hook nos render functions pra ativar interatividade
+const _origRP3 = renderPerformance;
+renderPerformance = function() {
+  _origRP3();
+  setTimeout(ativarInteratividade, 100);
+};
+
+const _origRC = renderCampo;
+renderCampo = function() {
+  _origRC();
+  setTimeout(ativarInteratividade, 100);
+};
+
+// Click nas linhas da tabela do campo -> vai pra Visao Geral filtrada por aquele inversor
+const _origRCT = renderCampoTable;
+renderCampoTable = function() {
+  _origRCT();
+  document.querySelectorAll('#campo-tbody tr').forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    if (tds.length < 5) return;
+    tr.style.cursor = 'pointer';
+    tr.title = 'Clique para ver no mapa';
+    tr.addEventListener('click', () => {
+      const inv = tds[4].textContent.trim();
+      irParaGeral('f-inversor', inv);
+    });
+  });
+};
+
+// Click nas linhas detalhes -> vai pra Visao Geral
+const _origRD = renderDetalhes;
+renderDetalhes = function() {
+  _origRD();
+  document.querySelectorAll('#det-tbody tr').forEach(tr => {
+    const tds = tr.querySelectorAll('td');
+    if (tds.length < 5) return;
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => {
+      const inv = tds[4].textContent.trim();
+      if (inv && inv !== '-') irParaGeral('f-inversor', inv);
+    });
+  });
+};
 
 
 init();
