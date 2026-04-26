@@ -131,9 +131,112 @@
   .formula-note { background: #0f172a; padding: 16px; border-radius: 8px; font-size: 12px; opacity: 0.85; line-height: 1.7; }
   .formula-note b { color: #06b6d4; }
 
+
+  /* ============ LOGIN ============ */
+  .login-screen { position: fixed; inset: 0; background: linear-gradient(135deg, #0f172a, #1e3a8a); display: flex; align-items: center; justify-content: center; z-index: 99999; }
+  .login-box { background: #1e293b; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); width: 90%; max-width: 400px; }
+  .login-box h1 { font-size: 24px; margin-bottom: 8px; color: #fff; text-align: center; }
+  .login-box .sub { text-align: center; opacity: 0.7; font-size: 13px; margin-bottom: 32px; }
+  .login-box label { display: block; font-size: 12px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; margin-top: 16px; }
+  .login-box input { width: 100%; background: #0f172a; color: #fff; border: 1px solid #334155; padding: 12px 14px; border-radius: 8px; font-size: 15px; }
+  .login-box input:focus { outline: none; border-color: #06b6d4; }
+  .login-box button { width: 100%; background: linear-gradient(135deg, #1e40af, #0891b2); color: #fff; border: none; padding: 14px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 24px; transition: transform 0.1s; }
+  .login-box button:hover { transform: translateY(-1px); }
+  .login-box .err { background: rgba(239,68,68,0.15); border: 1px solid #ef4444; color: #ef4444; padding: 10px; border-radius: 8px; font-size: 13px; margin-top: 16px; text-align: center; display: none; }
+  .login-box .err.show { display: block; }
+  .login-footer { text-align: center; margin-top: 20px; font-size: 11px; opacity: 0.5; }
+  .role-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+  .role-badge.admin { background: #10b981; color: #fff; }
+  .role-badge.viewer { background: #6366f1; color: #fff; }
+  .logout-btn { background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .logout-btn:hover { background: rgba(255,255,255,0.25); }
+
 </style>
 </head>
 <body>
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <h1>UFV Dashboard</h1>
+    <div class="sub">Anomalias Termicas - Acesso Restrito</div>
+    <label>Usuario</label>
+    <input type="text" id="login-user" autocomplete="username" autofocus>
+    <label>Senha</label>
+    <input type="password" id="login-pass" autocomplete="current-password">
+    <div class="err" id="login-err">Usuario ou senha invalidos</div>
+    <button id="login-btn">Entrar</button>
+    <div class="login-footer">FPV Solucoes Fotovoltaicas</div>
+  </div>
+</div>
+<script>
+// ============ AUTENTICACAO ============
+const USERS = {
+  'Elis2026': { senha: 'passnt01', papel: 'viewer', nome: 'Elis Energia' },
+  'AdmFPV':   { senha: 'Factore145', papel: 'admin', nome: 'Admin FPV' }
+};
+
+function fazerLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const user = USERS[u];
+  if (user && user.senha === p) {
+    sessionStorage.setItem('ufv-user', JSON.stringify({ login: u, papel: user.papel, nome: user.nome }));
+    document.getElementById('login-screen').style.display = 'none';
+    aplicarPapel();
+  } else {
+    const err = document.getElementById('login-err');
+    err.classList.add('show');
+    setTimeout(() => err.classList.remove('show'), 3000);
+  }
+}
+
+function fazerLogout() {
+  sessionStorage.removeItem('ufv-user');
+  location.reload();
+}
+
+function aplicarPapel() {
+  const raw = sessionStorage.getItem('ufv-user');
+  if (!raw) return;
+  const user = JSON.parse(raw);
+
+  // Adiciona badge de usuario no header
+  const actions = document.querySelector('header .actions');
+  if (actions && !document.getElementById('user-info')) {
+    const info = document.createElement('div');
+    info.id = 'user-info';
+    info.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600';
+    info.innerHTML = user.nome + '<span class="role-badge ' + user.papel + '">' + (user.papel === 'admin' ? 'ADMIN' : 'VISUALIZADOR') + '</span>' +
+      '<button class="logout-btn" onclick="fazerLogout()">Sair</button>';
+    actions.insertBefore(info, actions.firstChild);
+  }
+
+  // Esconde botao "Adicionar Usina" para visualizadores
+  if (user.papel === 'viewer') {
+    const addBtn = document.getElementById('btn-add');
+    if (addBtn) addBtn.style.display = 'none';
+  }
+}
+
+// Verifica login ao carregar
+document.addEventListener('DOMContentLoaded', () => {
+  const raw = sessionStorage.getItem('ufv-user');
+  if (raw) {
+    document.getElementById('login-screen').style.display = 'none';
+    aplicarPapel();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+
+  document.getElementById('login-btn').addEventListener('click', fazerLogin);
+  document.getElementById('login-pass').addEventListener('keyup', e => {
+    if (e.key === 'Enter') fazerLogin();
+  });
+  document.getElementById('login-user').addEventListener('keyup', e => {
+    if (e.key === 'Enter') document.getElementById('login-pass').focus();
+  });
+});
+</script>
+
 <script>
 // Aviso file:// apenas se nao for servidor local
 if (location.protocol === 'file:') {
@@ -241,6 +344,7 @@ if (location.protocol === 'file:') {
         <thead><tr>
           <th data-sort="id">ID</th>
           <th data-sort="anomalia">Tipo</th>
+          <th data-sort="status">Status</th>
           <th data-sort="modulo">Módulo</th>
           <th data-sort="string">String</th>
           <th data-sort="tracker">Tracker</th>
@@ -773,12 +877,12 @@ function aplicarFiltros() {
 }
 
 function initMap() {
-  map = L.map('map', { preferCanvas: true, maxZoom: 21 }).setView([-20.520, -49.330], 17);
-  // Esri World Imagery - confiavel em qualquer host (https://github.io etc)
+  // maxZoom 19 = limite seguro do Esri para nao retornar 404 (tile not found)
+  map = L.map('map', { preferCanvas: true, maxZoom: 19 }).setView([-20.520, -49.330], 17);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Esri, Maxar, Earthstar Geographics',
-    maxZoom: 21,
-    maxNativeZoom: 19
+    maxZoom: 19,
+    maxNativeZoom: 18
   }).addTo(map);
   markersCluster = L.markerClusterGroup({
     maxClusterRadius: 30,
@@ -823,7 +927,7 @@ function renderMap() {
     markersCluster.addLayer(marker);
     markerById[d.id] = marker;
   });
-  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
   document.getElementById('map-count').textContent = `(${filtered.length} pontos)`;
 }
 
@@ -907,9 +1011,16 @@ function renderTable() {
   tbody.innerHTML = sorted.map(d => {
     const cls = ANOMALIA_CLASS[d.anomalia] || '';
     const barWidth = Math.min(80, (d.delta||0)*2);
+    const statusN = (typeof normalizeStatus === 'function') ? normalizeStatus(d.status) : '_vazio';
+    const statusCor = statusN.includes('resolv') ? '#10b981' :
+                      statusN.includes('andament') ? '#06b6d4' :
+                      statusN.includes('pendent') ? '#f59e0b' :
+                      (statusN.includes('nao procede')||statusN.includes('improc')) ? '#94a3b8' : '#475569';
+    const statusTxt = (typeof statusLabel === 'function') ? statusLabel(d.status) : (d.status||'-');
     return `<tr data-id="${d.id}">
       <td><b>${d.id}</b></td>
       <td><span class="badge ${cls}">${d.anomalia||''}</span></td>
+      <td><span style="background:${statusCor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">${statusTxt}</span></td>
       <td>${d.modulo||''}</td>
       <td class="mono">${d.string||''}</td>
       <td>${d.tracker||''}</td>
@@ -931,7 +1042,7 @@ function renderTable() {
       if (m) {
         markersCluster.zoomToShowLayer(m, () => {
           m.openPopup();
-          map.setView(m.getLatLng(), 21);
+          map.setView(m.getLatLng(), 19);
         });
         document.querySelectorAll('tbody tr').forEach(t => t.classList.remove('selected'));
         tr.classList.add('selected');
