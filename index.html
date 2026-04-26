@@ -282,7 +282,7 @@ if (location.protocol === 'file:') {
         <option value="andamento">Em andamento</option>
         <option value="pendente">Pendente</option>
         <option value="naoprocede">Não procede</option>
-        <option value="vazio">Sem status</option>
+        
       </select>
       <label>Inversor:</label> <select id="f-inversor"><option value="">Todos</option></select>
       <label>Skid:</label> <select id="f-skid"><option value="">Todos</option></select>
@@ -392,6 +392,35 @@ if (location.protocol === 'file:') {
   </div>
 
   <div class="card" style="margin-top:24px">
+    <h2>Impacto Real na Geracao</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">
+      <div>
+        <label style="font-size:11px;opacity:0.7;text-transform:uppercase">Capacidade da usina (kWp)</label>
+        <input type="number" id="ger-capacity" value="5000" min="100" step="100" style="width:100%;background:#0f172a;color:#fff;border:1px solid #334155;padding:10px;border-radius:8px;margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:11px;opacity:0.7;text-transform:uppercase">Tarifa energia (R$/kWh)</label>
+        <input type="number" id="ger-tarifa" value="0.40" min="0" step="0.05" style="width:100%;background:#0f172a;color:#fff;border:1px solid #334155;padding:10px;border-radius:8px;margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:11px;opacity:0.7;text-transform:uppercase">Horas-sol/dia (HSP)</label>
+        <input type="number" id="ger-hsp" value="5.2" min="3" max="7" step="0.1" style="width:100%;background:#0f172a;color:#fff;border:1px solid #334155;padding:10px;border-radius:8px;margin-top:4px">
+      </div>
+    </div>
+
+    <div id="impacto-resumo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px"></div>
+
+    <h3 style="font-size:13px;color:#94a3b8;margin:20px 0 12px;text-transform:uppercase">Curva diaria de geracao (dia tipico)</h3>
+    <div class="chart-wrap" style="height:340px"><canvas id="chartCurvaDia"></canvas></div>
+
+    <h3 style="font-size:13px;color:#94a3b8;margin:24px 0 12px;text-transform:uppercase">Geracao mensal (12 meses)</h3>
+    <div class="chart-wrap" style="height:340px"><canvas id="chartGeracaoMes"></canvas></div>
+
+    <h3 style="font-size:13px;color:#94a3b8;margin:24px 0 12px;text-transform:uppercase">Perda acumulada em R$ (projecao anual)</h3>
+    <div class="chart-wrap" style="height:340px"><canvas id="chartPerdaR"></canvas></div>
+  </div>
+
+  <div class="card" style="margin-top:24px">
     <h2>Como o impacto e calculado</h2>
     <div class="formula-note">
       <b>Importante:</b> a termografia identifica APENAS uma fracao da perda total. Outros fatores sistemicos sempre estao presentes (cabeamento, derating termico, eficiencia do inversor, soiling geral, etc.). O dashboard separa as duas categorias.<br><br>
@@ -459,7 +488,7 @@ if (location.protocol === 'file:') {
         <option value="em andamento">Em andamento</option>
         <option value="pendente">Pendente</option>
         <option value="nao procede">Nao procede</option>
-        <option value="_vazio">Sem status</option>
+        
       </select>
     </div>
     <div class="table-wrap" style="max-height:600px">
@@ -823,7 +852,6 @@ function aplicarFiltros() {
     // Status (usa normalizeStatus se existir)
     if (stt) {
       const n = (typeof normalizeStatus === 'function') ? normalizeStatus(d.status) : (d.status||'').toLowerCase();
-      if (stt === 'vazio' && n !== '_vazio') return false;
       if (stt === 'resolvido' && !n.includes('resolv')) return false;
       if (stt === 'andamento' && !n.includes('andament')) return false;
       if (stt === 'pendente' && !n.includes('pendent')) return false;
@@ -850,17 +878,17 @@ function aplicarFiltros() {
 }
 
 function initMap() {
-  map = L.map('map', { preferCanvas: true, maxZoom: 20 }).setView([-20.520, -49.330], 17);
+  // maxZoom reduzido para 19 - alem disso Google tambem pode dar 404 em area rural
+  map = L.map('map', { preferCanvas: true, maxZoom: 19, minZoom: 12 }).setView([-20.520, -49.330], 17);
 
-  // Google Satellite (imagem atual, mostra a usina construida)
   const googleSat = L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
     subdomains: ['0','1','2','3'],
     attribution: 'Google Maps',
-    maxZoom: 20,
-    maxNativeZoom: 20
+    maxZoom: 19,
+    maxNativeZoom: 19,
+    errorTileUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzJlMzg0OCIvPjwvc3ZnPg=='
   });
 
-  // Esri (fallback - imagem mais antiga mas universal)
   const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Esri',
     maxZoom: 19,
@@ -929,7 +957,7 @@ function renderMap() {
     markersCluster.addLayer(marker);
     markerById[d.id] = marker;
   });
-  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
   document.getElementById('map-count').textContent = `(${filtered.length} pontos)`;
 }
 
@@ -1044,7 +1072,7 @@ function renderTable() {
       if (m) {
         markersCluster.zoomToShowLayer(m, () => {
           m.openPopup();
-          map.setView(m.getLatLng(), 20);
+          map.setView(m.getLatLng(), 19);
         });
         document.querySelectorAll('tbody tr').forEach(t => t.classList.remove('selected'));
         tr.classList.add('selected');
@@ -1404,7 +1432,7 @@ function renderPerformance() {
 let chartCampoTipos = null, chartCampoInv = null;
 
 function normalizeStatus(s) {
-  if (!s) return '_vazio';
+  if (!s) return 'pendente';  // Sem preenchimento = Pendente por padrao
   return String(s).trim().toLowerCase()
     .replace(/[áàâã]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i')
     .replace(/[óôõ]/g,'o').replace(/[úû]/g,'u').replace(/ç/g,'c');
@@ -1421,12 +1449,11 @@ function statusColor(s) {
 
 function statusLabel(s) {
   const n = normalizeStatus(s);
-  if (n === '_vazio') return 'Sem status';
   if (n.includes('resolv')) return 'Resolvido';
   if (n.includes('andament')) return 'Em andamento';
   if (n.includes('pendent')) return 'Pendente';
   if (n.includes('nao procede') || n.includes('improc')) return 'Nao procede';
-  return s;
+  return s || 'Pendente';
 }
 
 function renderCampo() {
@@ -1434,14 +1461,13 @@ function renderCampo() {
   const all = usinaAtual.anomalias;
 
   // KPIs
-  const buckets = { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0, vazio: 0 };
+  const buckets = { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0 };
   all.forEach(a => {
     const n = normalizeStatus(a.status);
     if (n.includes('resolv')) buckets.resolvido++;
     else if (n.includes('andament')) buckets.andamento++;
-    else if (n.includes('pendent')) buckets.pendente++;
     else if (n.includes('nao procede') || n.includes('improc')) buckets.naoprocede++;
-    else buckets.vazio++;
+    else buckets.pendente++;  // tudo que nao for resolvido/andamento/improcedente eh pendente
   });
   const total = all.length;
   const tratados = buckets.resolvido + buckets.naoprocede;
@@ -1462,19 +1488,18 @@ function renderCampo() {
       '<div class="stat warn" style="margin:0"><div class="label">Pendentes</div><div class="value">' + buckets.pendente + '</div></div>' +
       '<div class="stat" style="margin:0;border-left-color:#94a3b8"><div class="label">Nao procede</div><div class="value">' + buckets.naoprocede + '</div></div>' +
     '</div>' +
-    (buckets.vazio > 0 ? '<div style="background:#0f172a;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0.7">Ainda <b>' + buckets.vazio + '</b> anomalias sem status preenchido pela equipe.</div>' : '');
+    '';
 
   // Chart Status por Tipo
   const tipos = {};
   all.forEach(a => {
     const t = a.anomalia || '?';
-    tipos[t] = tipos[t] || { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0, vazio: 0 };
+    tipos[t] = tipos[t] || { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0 };
     const n = normalizeStatus(a.status);
     if (n.includes('resolv')) tipos[t].resolvido++;
     else if (n.includes('andament')) tipos[t].andamento++;
-    else if (n.includes('pendent')) tipos[t].pendente++;
     else if (n.includes('nao procede') || n.includes('improc')) tipos[t].naoprocede++;
-    else tipos[t].vazio++;
+    else tipos[t].pendente++;
   });
   if (chartCampoTipos) chartCampoTipos.destroy();
   chartCampoTipos = new Chart(document.getElementById('chartCampoTipos'), {
@@ -1485,9 +1510,7 @@ function renderCampo() {
         { label: 'Resolvidas', data: Object.values(tipos).map(v=>v.resolvido), backgroundColor: '#10b981' },
         { label: 'Em andamento', data: Object.values(tipos).map(v=>v.andamento), backgroundColor: '#06b6d4' },
         { label: 'Pendente', data: Object.values(tipos).map(v=>v.pendente), backgroundColor: '#f59e0b' },
-        { label: 'Nao procede', data: Object.values(tipos).map(v=>v.naoprocede), backgroundColor: '#94a3b8' },
-        { label: 'Sem status', data: Object.values(tipos).map(v=>v.vazio), backgroundColor: '#475569' }
-      ]
+        { label: 'Nao procede', data: Object.values(tipos).map(v=>v.naoprocede), backgroundColor: '#94a3b8' }]
     },
     options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }}}}, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true }}, maintainAspectRatio: false }
   });
@@ -1496,13 +1519,12 @@ function renderCampo() {
   const invs = {};
   all.forEach(a => {
     const t = a.inversor || '?';
-    invs[t] = invs[t] || { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0, vazio: 0 };
+    invs[t] = invs[t] || { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0 };
     const n = normalizeStatus(a.status);
     if (n.includes('resolv')) invs[t].resolvido++;
     else if (n.includes('andament')) invs[t].andamento++;
-    else if (n.includes('pendent')) invs[t].pendente++;
     else if (n.includes('nao procede') || n.includes('improc')) invs[t].naoprocede++;
-    else invs[t].vazio++;
+    else invs[t].pendente++;
   });
   const sortedInvKeys = Object.keys(invs).sort((a,b) => Object.values(invs[b]).reduce((s,v)=>s+v,0) - Object.values(invs[a]).reduce((s,v)=>s+v,0)).slice(0, 12);
   if (chartCampoInv) chartCampoInv.destroy();
@@ -1514,9 +1536,7 @@ function renderCampo() {
         { label: 'Resolvidas', data: sortedInvKeys.map(k=>invs[k].resolvido), backgroundColor: '#10b981' },
         { label: 'Em andamento', data: sortedInvKeys.map(k=>invs[k].andamento), backgroundColor: '#06b6d4' },
         { label: 'Pendente', data: sortedInvKeys.map(k=>invs[k].pendente), backgroundColor: '#f59e0b' },
-        { label: 'Nao procede', data: sortedInvKeys.map(k=>invs[k].naoprocede), backgroundColor: '#94a3b8' },
-        { label: 'Sem status', data: sortedInvKeys.map(k=>invs[k].vazio), backgroundColor: '#475569' }
-      ]
+        { label: 'Nao procede', data: sortedInvKeys.map(k=>invs[k].naoprocede), backgroundColor: '#94a3b8' }]
     },
     options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }}}}, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true }}, maintainAspectRatio: false }
   });
@@ -1531,7 +1551,6 @@ function renderCampoTable() {
   const filtered = usinaAtual.anomalias.filter(a => {
     if (!filt) return true;
     const n = normalizeStatus(a.status);
-    if (filt === '_vazio') return n === '_vazio';
     if (filt === 'resolvido') return n.includes('resolv');
     if (filt === 'em andamento') return n.includes('andament');
     if (filt === 'pendente') return n.includes('pendent');
@@ -1605,6 +1624,174 @@ renderMap = function() {
       else if (n.includes('nao procede') || n.includes('improc')) layer.setStyle({ fillColor: '#94a3b8', color: '#94a3b8' });
     });
   }, 100);
+};
+
+
+
+// ============ COMPARATIVO DE GERACAO ============
+let chartCurvaDia = null, chartGeracaoMes = null, chartPerdaR = null;
+
+// Sazonalidade media para latitude ~-20 (Brasil sudeste)
+const SAZONALIDADE_MES = [1.10, 1.05, 1.05, 0.95, 0.85, 0.80, 0.85, 0.95, 1.00, 1.10, 1.15, 1.15];
+const MESES_NOMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const DIAS_MES = [31,28,31,30,31,30,31,31,30,31,30,31];
+
+function gerarCurvaDiariaKW(capacityKWp) {
+  const horas = [], idealKW = [];
+  for (let h = 5; h <= 19; h += 0.5) {
+    horas.push(h.toFixed(1) + 'h');
+    // Bell curve centrada em 12h
+    const factor = Math.max(0, Math.cos((h - 12) * Math.PI / 14));
+    idealKW.push(capacityKWp * Math.pow(factor, 1.4) * 0.85);
+  }
+  return { horas, idealKW };
+}
+
+function calcularImpactoGeracao() {
+  if (!usinaAtual) return;
+  const capacity = parseFloat(document.getElementById('ger-capacity').value) || 5000;
+  const tarifa = parseFloat(document.getElementById('ger-tarifa').value) || 0.40;
+  const hsp = parseFloat(document.getElementById('ger-hsp').value) || 5.2;
+
+  // Calcula perda termografica (apenas anomalias nao resolvidas)
+  const ativas = usinaAtual.anomalias.filter(a => {
+    const n = normalizeStatus(a.status);
+    return !n.includes('resolv') && !n.includes('nao procede') && !n.includes('improc');
+  });
+
+  // Replica logica de aggregateLoss/inverterLoss
+  const byString = {};
+  ativas.forEach(a => {
+    const k = (a.string || '?') + '||' + (a.inversor || '?') + '||' + (a.skid || '?');
+    (byString[k] = byString[k] || []).push(a);
+  });
+  const stringStats = Object.entries(byString).map(([k, items]) => {
+    const [str, inv, skid] = k.split('||');
+    return { string: str, inversor: inv, skid: skid, count: items.length, loss: stringLoss(items) };
+  });
+  const byInv = {};
+  stringStats.forEach(s => {
+    (byInv[s.inversor] = byInv[s.inversor] || { skid: s.skid, strings: [] }).strings.push(s);
+  });
+  const invStats = Object.entries(byInv).map(([inv, x]) => {
+    const ic = inverterLoss(x.strings, 24);
+    return { inversor: inv, loss: ic.total };
+  });
+  const bySkid = {};
+  invStats.forEach(i => {
+    const skid = stringStats.find(s => s.inversor === i.inversor)?.skid || '?';
+    (bySkid[skid] = bySkid[skid] || []).push(i);
+  });
+  const skidStats = Object.entries(bySkid).map(([skid, invs]) => ({
+    skid, loss: aggregateLoss(invs.map(i=>i.loss), invs.length)
+  }));
+  const perdaTermografica = aggregateLoss(skidStats.map(s=>s.loss), skidStats.length);
+  const perdaSistemica = perdaSistemicaTotal();
+
+  // Geracao DIARIA tipica
+  const ger = gerarCurvaDiariaKW(capacity);
+  const realKW = ger.idealKW.map(v => v * (1 - (perdaTermografica + perdaSistemica) / 100));
+  const sistemicaKW = ger.idealKW.map(v => v * (1 - perdaSistemica / 100));
+
+  // Energia diaria (kWh)
+  const energiaIdealDia = capacity * hsp * (1 - perdaSistemica / 100);  // sem termografica = limpa
+  const energiaRealDia = capacity * hsp * (1 - (perdaSistemica + perdaTermografica) / 100);
+  const perdaKWhDia = energiaIdealDia - energiaRealDia;
+
+  // Mensal
+  const idealMes = SAZONALIDADE_MES.map((s, i) => energiaIdealDia * s * DIAS_MES[i]);
+  const realMes = SAZONALIDADE_MES.map((s, i) => energiaRealDia * s * DIAS_MES[i]);
+  const perdaMes = idealMes.map((v, i) => v - realMes[i]);
+
+  // Anual
+  const energiaIdealAno = idealMes.reduce((a,b)=>a+b, 0);
+  const energiaRealAno = realMes.reduce((a,b)=>a+b, 0);
+  const perdaKWhAno = energiaIdealAno - energiaRealAno;
+  const perdaReaisAno = perdaKWhAno * tarifa;
+  const perdaReaisDia = perdaKWhDia * tarifa;
+
+  // Render resumo
+  document.getElementById('impacto-resumo').innerHTML =
+    '<div class="stat" style="margin:0;border-left-color:#10b981"><div class="label">Geracao SEM problemas</div><div class="value">' + (energiaIdealAno/1000).toFixed(1) + ' MWh</div><div class="sub">por ano (cenario ideal)</div></div>' +
+    '<div class="stat" style="margin:0;border-left-color:#06b6d4"><div class="label">Geracao COM problemas</div><div class="value">' + (energiaRealAno/1000).toFixed(1) + ' MWh</div><div class="sub">situacao atual</div></div>' +
+    '<div class="stat critical" style="margin:0"><div class="label">Perda Anual</div><div class="value">' + (perdaKWhAno/1000).toFixed(1) + ' MWh</div><div class="sub">' + (perdaTermografica).toFixed(2) + '% termografica</div></div>' +
+    '<div class="stat critical" style="margin:0"><div class="label">Prejuizo R$ / ano</div><div class="value">R$ ' + (perdaReaisAno).toLocaleString('pt-BR', {maximumFractionDigits:0}) + '</div><div class="sub">R$ ' + perdaReaisDia.toFixed(2) + ' / dia</div></div>';
+
+  // Curva diaria
+  if (chartCurvaDia) chartCurvaDia.destroy();
+  chartCurvaDia = new Chart(document.getElementById('chartCurvaDia'), {
+    type: 'line',
+    data: {
+      labels: ger.horas,
+      datasets: [
+        { label: 'Ideal (sem anomalias)', data: ger.idealKW, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.4, borderWidth: 2.5 },
+        { label: 'Esperado (com perdas sistemicas)', data: sistemicaKW, borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.1)', fill: false, tension: 0.4, borderWidth: 2, borderDash: [5,3] },
+        { label: 'Atual (com anomalias termograficas)', data: realKW, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.15)', fill: true, tension: 0.4, borderWidth: 2.5 }
+      ]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 }}}, tooltip: { mode: 'index' }},
+      scales: { y: { beginAtZero: true, title: { display: true, text: 'Potencia (kW)' }}},
+      interaction: { mode: 'index', intersect: false },
+      maintainAspectRatio: false
+    }
+  });
+
+  // Mensal
+  if (chartGeracaoMes) chartGeracaoMes.destroy();
+  chartGeracaoMes = new Chart(document.getElementById('chartGeracaoMes'), {
+    type: 'bar',
+    data: {
+      labels: MESES_NOMES,
+      datasets: [
+        { label: 'Ideal (MWh)', data: idealMes.map(v=>v/1000), backgroundColor: '#10b981' },
+        { label: 'Atual (MWh)', data: realMes.map(v=>v/1000), backgroundColor: '#ef4444' }
+      ]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 }}}, tooltip: { callbacks: { afterBody: (ctx) => { const i = ctx[0].dataIndex; const perda = perdaMes[i]; return 'Perda do mes: ' + (perda).toFixed(0) + ' kWh (R$ ' + (perda * tarifa).toLocaleString('pt-BR', {maximumFractionDigits:0}) + ')'; }}}},
+      scales: { y: { beginAtZero: true, title: { display: true, text: 'Energia (MWh)' }}},
+      maintainAspectRatio: false
+    }
+  });
+
+  // Perda em R$ acumulada
+  let acumuladoR = 0;
+  const perdaAcumuladaR = perdaMes.map(v => { acumuladoR += v * tarifa; return acumuladoR; });
+  if (chartPerdaR) chartPerdaR.destroy();
+  chartPerdaR = new Chart(document.getElementById('chartPerdaR'), {
+    type: 'line',
+    data: {
+      labels: MESES_NOMES,
+      datasets: [
+        { label: 'Perda mensal (R$)', data: perdaMes.map(v => v * tarifa), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.15)', fill: true, tension: 0.3, yAxisID: 'y' },
+        { label: 'Perda acumulada (R$)', data: perdaAcumuladaR, borderColor: '#ef4444', borderWidth: 2.5, tension: 0.3, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 }}}},
+      scales: {
+        y: { type: 'linear', position: 'left', title: { display: true, text: 'Perda mensal (R$)' }, beginAtZero: true },
+        y1: { type: 'linear', position: 'right', title: { display: true, text: 'Acumulada (R$)' }, beginAtZero: true, grid: { drawOnChartArea: false }}
+      },
+      maintainAspectRatio: false
+    }
+  });
+}
+
+// Adiciona listeners nos inputs e re-calcula
+document.addEventListener('DOMContentLoaded', () => {
+  ['ger-capacity', 'ger-tarifa', 'ger-hsp'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', calcularImpactoGeracao);
+  });
+});
+
+// Estende renderPerformance para tambem chamar o impacto na geracao
+const _origRenderPerf2 = renderPerformance;
+renderPerformance = function() {
+  _origRenderPerf2();
+  setTimeout(calcularImpactoGeracao, 100);
 };
 
 
