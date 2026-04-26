@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de Anomalias Térmicas — UFV</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.5; }
+  header { background: linear-gradient(135deg, #1e40af, #0891b2); padding: 20px 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  header .title h1 { font-size: 22px; font-weight: 700; }
+  header .title p { font-size: 13px; opacity: 0.9; margin-top: 2px; }
+  header .actions { display: flex; gap: 12px; align-items: center; }
+  header select { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  header select option { background: #1e293b; color: #fff; }
+  header button { background: #fff; color: #1e40af; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px; }
+  header button:hover { background: #f1f5f9; }
+  .container { padding: 24px; max-width: 1800px; margin: 0 auto; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .stat { background: #1e293b; padding: 18px; border-radius: 12px; border-left: 4px solid #06b6d4; }
+  .stat .label { font-size: 11px; text-transform: uppercase; opacity: 0.7; letter-spacing: 0.5px; }
+  .stat .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .stat .sub { font-size: 12px; opacity: 0.6; margin-top: 4px; }
+  .stat.critical { border-left-color: #ef4444; }
+  .stat.warn { border-left-color: #f59e0b; }
+  .stat.ok { border-left-color: #10b981; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .card { background: #1e293b; border-radius: 12px; padding: 20px; }
+  .card h2 { font-size: 16px; margin-bottom: 16px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .card.map-card { padding: 20px; }
+  #map { height: 600px; border-radius: 8px; }
+  .map-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; opacity: 0.85; }
+  .map-legend .item { display: flex; align-items: center; gap: 6px; }
+  .map-legend .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; }
+  .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .filters select, .filters input { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
+  .filters label { font-size: 12px; opacity: 0.7; margin-right: 4px; }
+  .filters button { background: #06b6d4; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .filters button:hover { background: #0891b2; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead { background: #0f172a; position: sticky; top: 0; z-index: 5; }
+  th { text-align: left; padding: 10px 8px; font-weight: 600; color: #94a3b8; text-transform: uppercase; font-size: 10px; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: #06b6d4; }
+  th.sorted::after { content: ' ↓'; }
+  th.sorted.asc::after { content: ' ↑'; }
+  td { padding: 6px 8px; border-bottom: 1px solid #334155; white-space: nowrap; }
+  tbody tr:hover { background: #334155; cursor: pointer; }
+  tbody tr.selected { background: #1e40af; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .badge.hot-spot { background: #f59e0b; color: #000; }
+  .badge.multi { background: #ef4444; color: #fff; }
+  .badge.shadow { background: #6366f1; color: #fff; }
+  .badge.diode { background: #ec4899; color: #fff; }
+  .badge.dirty { background: #84cc16; color: #000; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .table-wrap { max-height: 600px; overflow: auto; border-radius: 8px; }
+  .temp-bar { display: inline-block; height: 4px; background: linear-gradient(to right, #10b981, #f59e0b, #ef4444); border-radius: 2px; vertical-align: middle; margin-left: 6px; }
+  .chart-wrap { position: relative; height: 280px; }
+  .mono { font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px; }
+  footer { text-align: center; padding: 24px; opacity: 0.5; font-size: 12px; }
+
+  /* Leaflet popup styling */
+  .leaflet-popup-content-wrapper { background: #0f172a; color: #e2e8f0; }
+  .leaflet-popup-tip { background: #0f172a; }
+  .leaflet-popup-content { margin: 12px 14px; font-size: 12px; line-height: 1.5; }
+  .popup-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
+  .popup-row .k { opacity: 0.6; font-size: 11px; }
+  .popup-row .v { font-weight: 600; }
+  .popup-title { font-size: 14px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #334155; }
+
+  /* Modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 9999; }
+  .modal-bg.show { display: flex; }
+  .modal { background: #1e293b; padding: 32px; border-radius: 16px; max-width: 600px; width: 90%; max-height: 90vh; overflow: auto; }
+  .modal h2 { margin-bottom: 16px; font-size: 20px; }
+  .modal p { margin-bottom: 16px; opacity: 0.8; font-size: 14px; }
+  .modal input[type="text"] { width: 100%; background: #0f172a; color: #fff; border: 1px solid #334155; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
+  .drop-zone { border: 2px dashed #334155; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .drop-zone:hover, .drop-zone.over { border-color: #06b6d4; background: rgba(6,182,212,0.1); }
+  .modal .actions { display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end; }
+  .modal button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
+  .modal .primary { background: #06b6d4; color: #fff; }
+  .modal .primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .modal .secondary { background: #334155; color: #fff; }
+  .preview { background: #0f172a; padding: 12px; border-radius: 8px; margin-top: 16px; font-size: 13px; max-height: 200px; overflow: auto; font-family: monospace; }
+
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } #map { height: 400px; } }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; padding: 0 32px; background: #1e293b; border-bottom: 1px solid #334155; }
+  .tab { padding: 14px 24px; cursor: pointer; color: #94a3b8; font-weight: 600; font-size: 14px; border-bottom: 3px solid transparent; transition: all 0.2s; }
+  .tab:hover { color: #06b6d4; }
+  .tab.active { color: #06b6d4; border-bottom-color: #06b6d4; background: rgba(6,182,212,0.05); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Performance specific */
+  .health-card { background: linear-gradient(135deg, #1e293b, #0f172a); padding: 32px; border-radius: 16px; text-align: center; margin-bottom: 24px; border: 2px solid #334155; }
+  .health-card .score { font-size: 72px; font-weight: 800; line-height: 1; }
+  .health-card .label { font-size: 14px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }
+  .health-card .breakdown { display: flex; justify-content: center; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .health-card .b-item { text-align: center; }
+  .health-card .b-item .v { font-size: 24px; font-weight: 700; }
+  .health-card .b-item .k { font-size: 11px; opacity: 0.7; text-transform: uppercase; }
+
+  .impact-bar-row { display: grid; grid-template-columns: 130px 1fr 70px 80px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #334155; font-size: 13px; }
+  .impact-bar-row:hover { background: #0f172a; }
+  .impact-bar-row .name { font-weight: 600; }
+  .impact-bar-row .bar-bg { background: #0f172a; height: 18px; border-radius: 9px; overflow: hidden; position: relative; }
+  .impact-bar-row .bar-fill { height: 100%; border-radius: 9px; transition: width 0.4s; display: flex; align-items: center; padding: 0 8px; font-size: 11px; font-weight: 600; color: #fff; }
+  .impact-bar-row .count { text-align: center; font-weight: 600; color: #94a3b8; }
+  .impact-bar-row .impact { text-align: right; font-weight: 700; }
+
+  .skid-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .skid-card { background: #1e293b; padding: 20px; border-radius: 12px; border-left: 5px solid #06b6d4; }
+  .skid-card.high { border-left-color: #ef4444; }
+  .skid-card.med { border-left-color: #f59e0b; }
+  .skid-card.low { border-left-color: #10b981; }
+  .skid-card .name { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .skid-card .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .skid-card .stat-mini .v { font-size: 20px; font-weight: 700; }
+  .skid-card .stat-mini .l { font-size: 11px; opacity: 0.6; text-transform: uppercase; }
+
+  .formula-note { background: #0f172a; padding: 16px; border-radius: 8px; font-size: 12px; opacity: 0.85; line-height: 1.7; }
+  .formula-note b { color: #06b6d4; }
+
+</style>
+</head>
+<body>
+<script>
+// Aviso file:// apenas se nao for servidor local
+if (location.protocol === 'file:') {
+  setTimeout(() => {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'background:#1e40af;color:#fff;padding:12px 24px;text-align:center;font-size:13px;border-bottom:2px solid #06b6d4;position:relative';
+    banner.innerHTML = '<b>Modo offline</b> - voce abriu o arquivo direto, entao o auto-sync com Google Sheets esta desativado (limitacao do navegador). Use os dados embutidos OU rode <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px">python -m http.server 8000</code> na pasta para testar com sync. Quando subir no GitHub Pages, funciona automatico. <span style="cursor:pointer;margin-left:12px;opacity:0.7" onclick="this.parentNode.remove()">&times; fechar</span>';
+    document.body.insertBefore(banner, document.body.firstChild);
+  }, 200);
+}
+</script>
+<header>
+  <div class="title">
+    <h1>☀ Dashboard de Anomalias Térmicas</h1>
+    <p id="hdr-sub">Inspeção termográfica por drone</p>
+  </div>
+  <div class="actions">
+    <span id="sync-status" style="font-size:11px;opacity:0.85;display:flex;align-items:center;gap:6px" title="Status do auto-sync com Google Sheets"></span>
+    <button id="btn-sync" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.4);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px" title="Recarregar do Google Sheets">Atualizar</button>
+    <select id="usina-select" title="Selecionar usina"></select>
+    <button id="btn-add">+ Adicionar Usina</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="geral">Visao Geral</div>
+  <div class="tab" data-tab="performance">Performance e Impacto</div>
+  <div class="tab" data-tab="campo">Correcoes de Campo</div>
+</div>
+
+<div class="container">
+<div class="tab-content active" id="tab-geral">
+  <div class="stats-grid" id="stats"></div>
+
+  <div class="card" style="margin-bottom:24px">
+    <div class="filters">
+      <label>Anomalia:</label> <select id="f-anomalia"><option value="">Todas</option></select>
+      <label>Criticidade:</label>
+      <select id="f-criticidade">
+        <option value="">Todas</option>
+        <option value="critico">Crítico (ΔT ≥ 20°C)</option>
+        <option value="moderado">Moderado (10–20°C)</option>
+        <option value="baixo">Baixo (&lt; 10°C)</option>
+      </select>
+      <label>Status:</label>
+      <select id="f-status">
+        <option value="">Todos</option>
+        <option value="resolvido">Resolvido</option>
+        <option value="andamento">Em andamento</option>
+        <option value="pendente">Pendente</option>
+        <option value="naoprocede">Não procede</option>
+        <option value="vazio">Sem status</option>
+      </select>
+      <label>Inversor:</label> <select id="f-inversor"><option value="">Todos</option></select>
+      <label>Skid:</label> <select id="f-skid"><option value="">Todos</option></select>
+      <label>Tracker:</label> <select id="f-tracker"><option value="">Todos</option></select>
+      <label>ΔT mín:</label> <input id="f-delta" type="number" step="0.5" placeholder="0" style="width:70px">
+      <label>Data corr. de:</label> <input id="f-data-de" type="date" style="width:140px">
+      <label>até:</label> <input id="f-data-ate" type="date" style="width:140px">
+      <label>Busca:</label> <input id="f-search" type="text" placeholder="qualquer campo..." style="width:160px">
+      <button id="reset">Limpar filtros</button>
+      <span id="contador" style="margin-left:auto; opacity:0.7"></span>
+    </div>
+  </div>
+
+  <div class="card map-card" style="margin-bottom:24px">
+    <h2>📍 Mapa de Anomalias <span id="map-count" style="font-size:12px;font-weight:400;opacity:0.6"></span></h2>
+    <div id="map"></div>
+    <div class="map-legend">
+      <span class="item"><span class="dot" style="background:#ef4444"></span> multi hot-spot</span>
+      <span class="item"><span class="dot" style="background:#f59e0b"></span> hot-spot</span>
+      <span class="item"><span class="dot" style="background:#6366f1"></span> shadow</span>
+      <span class="item"><span class="dot" style="background:#ec4899"></span> open diode</span>
+      <span class="item"><span class="dot" style="background:#84cc16"></span> dirty module</span>
+      <span class="item" style="margin-left:auto">Tamanho do círculo proporcional ao ΔT</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Tipos de Anomalia</h2>
+      <div class="chart-wrap"><canvas id="chartTipos"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Anomalias por Skid</h2>
+      <div class="chart-wrap"><canvas id="chartSkids"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Anomalias por Inversor</h2>
+      <div class="chart-wrap" style="height:340px"><canvas id="chartInv"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Distribuição de ΔT</h2>
+      <div class="chart-wrap" style="height:340px"><canvas id="chartDelta"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📋 Tabela Completa de Anomalias <span id="tbCount" style="font-size:12px;font-weight:400;opacity:0.6"></span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th data-sort="id">ID</th>
+          <th data-sort="anomalia">Tipo</th>
+          <th data-sort="modulo">Módulo</th>
+          <th data-sort="string">String</th>
+          <th data-sort="tracker">Tracker</th>
+          <th data-sort="inversor">Inversor</th>
+          <th data-sort="skid">Skid</th>
+          <th data-sort="temp_max">T.Max °C</th>
+          <th data-sort="delta">ΔT °C</th>
+          <th data-sort="lat">GPS</th>
+          <th data-sort="foto">Foto</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="tab-content" id="tab-performance">
+  <div class="health-card">
+    <div class="label">Saude da Usina</div>
+    <div class="score" id="health-score">--</div>
+    <div class="label" id="health-label">--</div>
+    <div class="breakdown">
+      <div class="b-item"><div class="v" id="h-loss">--</div><div class="k">Perda estimada</div></div>
+      <div class="b-item"><div class="v" id="h-anom">--</div><div class="k">Anomalias</div></div>
+      <div class="b-item"><div class="v" id="h-sev">--</div><div class="k">Criticas</div></div>
+      <div class="b-item"><div class="v" id="h-affected">--</div><div class="k">Inversores afetados</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h2>Decomposicao de Perdas (Loss Diagram)</h2>
+    <div id="loss-diagram"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h2>Performance por Skid</h2>
+    <div class="skid-grid" id="skid-grid"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Top Inversores Afetados</h2>
+      <div id="inv-impact"></div>
+    </div>
+    <div class="card">
+      <h2>Top Strings Afetadas</h2>
+      <div id="str-impact"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h2>Como o impacto e calculado</h2>
+    <div class="formula-note">
+      <b>Importante:</b> a termografia identifica APENAS uma fracao da perda total. Outros fatores sistemicos sempre estao presentes (cabeamento, derating termico, eficiencia do inversor, soiling geral, etc.). O dashboard separa as duas categorias.<br><br>
+
+      <b>1. Perda por modulo - calibrada por DT (IEC TS 62446-3):</b><br>
+      A severidade depende do tipo + DT medido. Categorias da norma:<br>
+      &bull; <b>Categoria 1</b> (DT &lt; 10C): impacto baixo, monitorar<br>
+      &bull; <b>Categoria 2</b> (DT 10-20C): impacto moderado, manutencao programada<br>
+      &bull; <b>Categoria 3</b> (DT &gt; 20C): impacto severo, intervencao urgente<br><br>
+
+      Tabela usada (% de perda no modulo):<br>
+      <table style="width:100%;font-size:11px;margin:8px 0">
+        <tr style="opacity:0.7"><td><b>Tipo</b></td><td><b>DT&lt;10</b></td><td><b>DT 10-20</b></td><td><b>DT 20-30</b></td><td><b>DT&gt;30</b></td></tr>
+        <tr><td>hot-spot</td><td>0.8%</td><td>2.5%</td><td colspan="2">5%</td></tr>
+        <tr><td>multi hot-spot</td><td>2.5%</td><td>6%</td><td>12%</td><td>20%</td></tr>
+        <tr><td>shadow</td><td>2-5%</td><td colspan="3">10%</td></tr>
+        <tr><td>open diode</td><td colspan="4">33% (sempre)</td></tr>
+        <tr><td>dirty module</td><td>1.5%</td><td colspan="3">4%</td></tr>
+      </table>
+
+      <b>2. String (modulos em serie):</b><br>
+      <code>Perda_string = pior_modulo + (soma_outros &times; 0.4)</code><br>
+      Bonus 1.5x quando ha 2+ multi hot-spots concentrados.<br><br>
+
+      <b>3. Inversor (strings em paralelo no MPPT):</b><br>
+      <code>Perda_inv = media_strings + mismatch_MPPT</code><br>
+      Mismatch_MPPT proporcional ao desvio padrao das perdas das strings (1-4%). Tag <b>+X% MM</b> identifica inversores afetados.<br><br>
+
+      <b>4. Perdas Sistemicas (tipicas para UFV de medio porte no Brasil):</b><br>
+      Derating termico 4% &middot; Eficiencia inversor 2% &middot; Soiling geral 2% &middot; Reflexao/IAM 1.5% &middot; Mismatch fabricacao 1% &middot; Cabos DC 1% &middot; Cabos AC 0.8% &middot; Disponibilidade 0.5%<br>
+      <b>Total sistemico tipico: ~12.8%</b> (perda inerente, nao corrigivel pela termografia).<br><br>
+
+      <b>Performance Ratio Esperado = 100% - (perda termografica + perda sistemica)</b>
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-campo">
+  <div class="card" style="margin-bottom:24px">
+    <h2 style="display:flex;align-items:center;justify-content:space-between">
+      <span>Progresso da Equipe de Campo</span>
+      <button id="btn-refresh-campo" style="background:#06b6d4;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">Atualizar da Planilha</button>
+    </h2>
+    <div id="campo-progress" style="margin-top:8px"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Status por Tipo de Anomalia</h2>
+      <div class="chart-wrap" style="height:280px"><canvas id="chartCampoTipos"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Status por Inversor</h2>
+      <div class="chart-wrap" style="height:280px"><canvas id="chartCampoInv"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h2>Detalhamento por Anomalia</h2>
+    <div class="filters" style="margin-bottom:12px">
+      <label>Status:</label>
+      <select id="f-campo-status">
+        <option value="">Todos</option>
+        <option value="resolvido">Resolvido</option>
+        <option value="em andamento">Em andamento</option>
+        <option value="pendente">Pendente</option>
+        <option value="nao procede">Nao procede</option>
+        <option value="_vazio">Sem status</option>
+      </select>
+    </div>
+    <div class="table-wrap" style="max-height:600px">
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Tipo</th><th>Modulo</th><th>String</th><th>Inversor</th><th>Skid</th>
+          <th>DT</th><th>Status</th><th>Data Correcao</th><th>Problema Identificado</th>
+        </tr></thead>
+        <tbody id="campo-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h2>Como funciona o fluxo</h2>
+    <div class="formula-note">
+      <b>1.</b> A planilha tem agora duas abas: <code>usina2_anomalias_v1</code> (anomalias detectadas) e <code>Equipe Campo</code> (controle de execucao).<br>
+      <b>2.</b> A equipe de campo preenche na aba <b>Equipe Campo</b> as colunas: <b>Status</b> (Resolvido / Em andamento / Pendente / Nao procede), <b>Data da Correcao</b> e <b>Problema Identificado</b>.<br>
+      <b>3.</b> Quando voce sobe a planilha atualizada (botao <b>+ Adicionar Usina</b> -> seleciona a mesma usina pra sobrescrever), o site le as duas abas e merge os status nas anomalias.<br>
+      <b>4.</b> Anomalias <b>Resolvidas</b> sao excluidas dos calculos de perda na aba Performance, refletindo a melhoria na usina.<br>
+      <b>5.</b> O mapa marca em <b>verde</b> as resolvidas e em <b>cinza</b> as Nao procede.
+    </div>
+  </div>
+</div>
+
+<footer>
+  Dashboard gerado a partir de planilhas de inspeção termográfica · <span id="footer-info"></span>
+</footer>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2>+ Adicionar Nova Usina</h2>
+    <p>Nome da usina:</p>
+    <input type="text" id="m-nome" placeholder="ex: UFV Sol do Sertão">
+    <p>Arraste o arquivo .xlsx da inspeção:</p>
+    <div class="drop-zone" id="drop">
+      <div style="font-size:48px; margin-bottom:8px">📊</div>
+      <div><b>Arraste aqui</b> ou <u>clique pra selecionar</u></div>
+      <div style="font-size:12px; opacity:0.6; margin-top:8px">Colunas esperadas: ID, FileName, Foto, Anomalies, Module, String, Tracker, Inverter, Skid, X, Y, TempMax, TempMin, Delta, Latitude, Longitude</div>
+      <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
+    </div>
+    <div id="m-preview"></div>
+    <div class="actions">
+      <button class="secondary" id="m-cancel">Cancelar</button>
+      <button class="primary" id="m-save" disabled>Baixar JSON atualizado</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ CONFIGURACAO GOOGLE SHEETS (auto-sync) ============
+// Para conectar uma usina ao Google Sheets, preencha aqui:
+const SHEETS_CONFIG = {
+  'nova-granada-2': {
+    sheetId: '1XK86NsxCx4_djNfpQp6DQueUgrm02iWFt8czGwq2dmg',
+    gidAnomalias: '761038550',
+    gidCampo: '137624344'
+  }
+  // Para adicionar outras usinas: 'id-da-usina': { sheetId, gidAnomalias, gidCampo }
+};
+
+// Auto-refresh em ms (0 = desativado). Padrao: 5 minutos.
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+
+const ANOMALIA_CLASS = { 'hot-spot':'hot-spot','multi hot-spot':'multi','shadow':'shadow','open diode':'diode','dirty module':'dirty' };
+const ANOMALIA_COLOR = { 'hot-spot':'#f59e0b','multi hot-spot':'#ef4444','shadow':'#6366f1','open diode':'#ec4899','dirty module':'#84cc16' };
+
+let DB = { version: 1, usinas: [] };
+let usinaAtual = null;
+let filtered = [];
+let sortKey = 'id', sortAsc = true;
+let map, markersCluster;
+let chartTipos, chartSkids, chartInv, chartDelta;
+let novaUsinaPendente = null;
+let novaUsinaPendenteSobreescrever = false;
+let markerById = {};
+
+// Dados embutidos (funciona offline e como fallback)
+const EMBEDDED_DB = {"version": 1, "usinas": [{"id": "nova-granada-2", "nome": "UFV Nova Granada 2", "data_inspecao": "2026-04-26", "anomalias": [{"id": 1, "filename": "DJI_0426_R_01_Voo01.JPG", "foto": "DJI_0426_R_01_Voo01.jpg", "anomalia": "hot-spot", "modulo": "32", "string": "ST-1.3.12.12", "tracker": "T-1.12", "inversor": "INV-1.03", "skid": "SKID 1", "x": 674320.086, "y": 7730144.252, "temp_max": 47.6, "temp_min": 44.1, "delta": 3.5, "lat": -20.519439, "lng": -49.328171, "foto_url": "https://drive.google.com/file/d/1tvruMRysM92TTeVRI95Fgae9K8ZYQUON/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1tvruMRysM92TTeVRI95Fgae9K8ZYQUON&sz=w400", "foto_id": "1tvruMRysM92TTeVRI95Fgae9K8ZYQUON", "status": null, "data_correcao": null, "problema": null}, {"id": 2, "filename": "DJI_0426_R_01_Voo01.JPG", "foto": "DJI_0426_R_01_Voo01.jpg", "anomalia": "hot-spot", "modulo": "33", "string": "ST-1.3.12.12", "tracker": "T-1.12", "inversor": "INV-1.03", "skid": "SKID 1", "x": 674320.018, "y": 7730142.932, "temp_max": 47.4, "temp_min": 43.8, "delta": 3.6, "lat": -20.519451, "lng": -49.328171, "foto_url": "https://drive.google.com/file/d/1tvruMRysM92TTeVRI95Fgae9K8ZYQUON/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1tvruMRysM92TTeVRI95Fgae9K8ZYQUON&sz=w400", "foto_id": "1tvruMRysM92TTeVRI95Fgae9K8ZYQUON", "status": null, "data_correcao": null, "problema": null}, {"id": 3, "filename": "DJI_0426_R_01_Voo01.JPG", "foto": "DJI_0426_R_01_Voo01.jpg", "anomalia": "hot-spot", "modulo": "34", "string": "ST-1.3.12.12", "tracker": "T-1.12", "inversor": "INV-1.03", "skid": "SKID 1", "x": 674320.018, "y": 7730141.635, "temp_max": 48.0, "temp_min": 43.4, "delta": 4.6, "lat": -20.519462, "lng": -49.328171, "foto_url": "https://drive.google.com/file/d/1tvruMRysM92TTeVRI95Fgae9K8ZYQUON/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1tvruMRysM92TTeVRI95Fgae9K8ZYQUON&sz=w400", "foto_id": "1tvruMRysM92TTeVRI95Fgae9K8ZYQUON", "status": null, "data_correcao": null, "problema": null}, {"id": 4, "filename": "DJI_0426_R_01_Voo01.JPG", "foto": "DJI_0426_R_01_Voo01.jpg", "anomalia": "hot-spot", "modulo": "33", "string": "ST-1.3.12.11", "tracker": "T-1.12", "inversor": "INV-1.03", "skid": "SKID 1", "x": 674324.967, "y": 7730143.023, "temp_max": 46.0, "temp_min": 42.5, "delta": 3.5, "lat": -20.519449, "lng": -49.328124, "foto_url": "https://drive.google.com/file/d/1tvruMRysM92TTeVRI95Fgae9K8ZYQUON/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1tvruMRysM92TTeVRI95Fgae9K8ZYQUON&sz=w400", "foto_id": "1tvruMRysM92TTeVRI95Fgae9K8ZYQUON", "status": null, "data_correcao": null, "problema": null}, {"id": 5, "filename": "DJI_0426_R_01_Voo01.JPG", "foto": "DJI_0426_R_01_Voo01.jpg", "anomalia": "hot-spot", "modulo": "34", "string": "ST-1.3.12.11", "tracker": "T-1.12", "inversor": "INV-1.03", "skid": "SKID 1", "x": 674324.997, "y": 7730141.665, "temp_max": 46.2, "temp_min": 43.2, "delta": 3, "lat": -20.519462, "lng": -49.328123, "foto_url": "https://drive.google.com/file/d/1tvruMRysM92TTeVRI95Fgae9K8ZYQUON/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1tvruMRysM92TTeVRI95Fgae9K8ZYQUON&sz=w400", "foto_id": "1tvruMRysM92TTeVRI95Fgae9K8ZYQUON", "status": null, "data_correcao": null, "problema": null}, {"id": 6, "filename": "DJI_0620_R_01_Voo01.JPG", "foto": "DJI_0620_R_01_Voo01.jpg", "anomalia": "hot-spot", "modulo": "06", "string": "ST-1.3.13.2", "tracker": "T-1.13", "inversor": "INV-1.03", "skid": "SKID 1", "x": 674314.992, "y": 7730177.255, "temp_max": 47.4, "temp_min": 41.7, "delta": 5.7, "lat": -20.519141, "lng": -49.328223, "foto_url": "https://drive.google.com/file/d/1d2rECS0d2e0_-EwkX4BCYxx287do6LWs/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1d2rECS0d2e0_-EwkX4BCYxx287do6LWs&sz=w400", "foto_id": "1d2rECS0d2e0_-EwkX4BCYxx287do6LWs", "status": null, "data_correcao": null, "problema": null}, {"id": 7, "filename": "DJI_0972_R_01_Voo02.JPG", "foto": "DJI_0972_R_01_Voo02.jpg", "anomalia": "multi hot-spot", "modulo": "34", "string": "ST-1.3.15.9", "tracker": "T-1.15", "inversor": "INV-1.03", "skid": "SKID 1", "x": 674289.97, "y": 7730137.055, "temp_max": 39.5, "temp_min": 34.4, "delta": 5.1, "lat": -20.519507, "lng": -49.328459, "foto_url": "https://drive.google.com/file/d/1LDD3lb1GCVNXB2iybydxVVf3bi41jJEX/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1LDD3lb1GCVNXB2iybydxVVf3bi41jJEX&sz=w400", "foto_id": "1LDD3lb1GCVNXB2iybydxVVf3bi41jJEX", "status": null, "data_correcao": null, "problema": null}, {"id": 8, "filename": "DJI_0440_R_03_Voo03.JPG", "foto": "DJI_0440_R_03_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.4.2.5", "tracker": "T-1.02", "inversor": "INV-1.04", "skid": "SKID 1", "x": 674195.226, "y": 7730166.086, "temp_max": 48.5, "temp_min": 43.0, "delta": 5.5, "lat": -20.519253, "lng": -49.32937, "foto_url": "https://drive.google.com/file/d/1B7ElLu_1MZSHTkgm_X804vPR9JwjSksJ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1B7ElLu_1MZSHTkgm_X804vPR9JwjSksJ&sz=w400", "foto_id": "1B7ElLu_1MZSHTkgm_X804vPR9JwjSksJ", "status": null, "data_correcao": null, "problema": null}, {"id": 9, "filename": "DJI_0440_R_03_Voo03.JPG", "foto": "DJI_0440_R_03_Voo03.jpg", "anomalia": "hot-spot", "modulo": "04", "string": "ST-1.4.2.5", "tracker": "T-1.02", "inversor": "INV-1.04", "skid": "SKID 1", "x": 674195.182, "y": 7730164.764, "temp_max": 46.0, "temp_min": 43.0, "delta": 3, "lat": -20.519265, "lng": -49.32937, "foto_url": "https://drive.google.com/file/d/1B7ElLu_1MZSHTkgm_X804vPR9JwjSksJ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1B7ElLu_1MZSHTkgm_X804vPR9JwjSksJ&sz=w400", "foto_id": "1B7ElLu_1MZSHTkgm_X804vPR9JwjSksJ", "status": null, "data_correcao": null, "problema": null}, {"id": 10, "filename": "DJI_0119_R_02_Voo02.JPG", "foto": "DJI_0119_R_02_Voo02.jpg", "anomalia": "dirty module", "modulo": "01", "string": "ST-1.4.16.12", "tracker": "T-1.16", "inversor": "INV-1.04", "skid": "SKID 1", "x": 674279.988, "y": 7730179.256, "temp_max": 41.5, "temp_min": 37.3, "delta": 4.2, "lat": -20.519126, "lng": -49.328558, "foto_url": "https://drive.google.com/file/d/1-c0mXjCg4iTwu1BPCue5Zai-qSs_e__K/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1-c0mXjCg4iTwu1BPCue5Zai-qSs_e__K&sz=w400", "foto_id": "1-c0mXjCg4iTwu1BPCue5Zai-qSs_e__K", "status": null, "data_correcao": null, "problema": null}, {"id": 11, "filename": "DJI_0137_R_02_Voo02.JPG", "foto": "DJI_0137_R_02_Voo02.jpg", "anomalia": "multi hot-spot", "modulo": "33", "string": "ST-1.4.16.12", "tracker": "T-1.16", "inversor": "INV-1.04", "skid": "SKID 1", "x": 674279.943, "y": 7730136.867, "temp_max": 41.4, "temp_min": 36.2, "delta": 5.2, "lat": -20.519509, "lng": -49.328555, "foto_url": "https://drive.google.com/file/d/1ZUAb6H5QEiT9NPMeFujAu0cf-PnUnc2E/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ZUAb6H5QEiT9NPMeFujAu0cf-PnUnc2E&sz=w400", "foto_id": "1ZUAb6H5QEiT9NPMeFujAu0cf-PnUnc2E", "status": null, "data_correcao": null, "problema": null}, {"id": 12, "filename": "DJI_0415_R_08_Voo05.JPG", "foto": "DJI_0415_R_08_Voo05.jpg", "anomalia": "hot-spot", "modulo": "01", "string": "ST-1.5.19.7", "tracker": "T-1.19", "inversor": "INV-1.05", "skid": "SKID 1", "x": 673860.117, "y": 7730071.645, "temp_max": 54.4, "temp_min": 47.2, "delta": 7.2, "lat": -20.520137, "lng": -49.332573, "foto_url": "https://drive.google.com/file/d/1dHKtm7JsXV0Cq2ju94JT2dfEjYCw0twz/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1dHKtm7JsXV0Cq2ju94JT2dfEjYCw0twz&sz=w400", "foto_id": "1dHKtm7JsXV0Cq2ju94JT2dfEjYCw0twz", "status": null, "data_correcao": null, "problema": null}, {"id": 13, "filename": "DJI_0087_R_08_Voo05.JPG", "foto": "DJI_0087_R_08_Voo05.jpg", "anomalia": "hot-spot", "modulo": "06", "string": "ST-1.6.21.2", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673880.073, "y": 7730113.646, "temp_max": 53.3, "temp_min": 44.8, "delta": 8.5, "lat": -20.519756, "lng": -49.332386, "foto_url": "https://drive.google.com/file/d/1OqxS7pejhb2Z8skjIobgbnZn56XCyVFQ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1OqxS7pejhb2Z8skjIobgbnZn56XCyVFQ&sz=w400", "foto_id": "1OqxS7pejhb2Z8skjIobgbnZn56XCyVFQ", "status": null, "data_correcao": null, "problema": null}, {"id": 14, "filename": "DJI_0089_R_08_Voo05.JPG", "foto": "DJI_0089_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "01", "string": "ST-1.6.21.2", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673880.224, "y": 7730120.224, "temp_max": 56.4, "temp_min": 44.3, "delta": 12.1, "lat": -20.519696, "lng": -49.332385, "foto_url": "https://drive.google.com/file/d/1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU&sz=w400", "foto_id": "1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU", "status": null, "data_correcao": null, "problema": null}, {"id": 15, "filename": "DJI_0932_R_07_Voo05.JPG", "foto": "DJI_0932_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.6.21.3", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673885.166, "y": 7730120.376, "temp_max": 54.5, "temp_min": 31.8, "delta": 22.7, "lat": -20.519695, "lng": -49.332338, "foto_url": "https://drive.google.com/file/d/1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM&sz=w400", "foto_id": "1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM", "status": null, "data_correcao": null, "problema": null}, {"id": 16, "filename": "DJI_0089_R_08_Voo05.JPG", "foto": "DJI_0089_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.6.21.2", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673880.091, "y": 7730117.6, "temp_max": 55.9, "temp_min": 43.1, "delta": 12.8, "lat": -20.51972, "lng": -49.332386, "foto_url": "https://drive.google.com/file/d/1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU&sz=w400", "foto_id": "1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU", "status": null, "data_correcao": null, "problema": null}, {"id": 17, "filename": "DJI_0089_R_08_Voo05.JPG", "foto": "DJI_0089_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-1.6.21.2", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673880.061, "y": 7730116.333, "temp_max": 60.1, "temp_min": 42.9, "delta": 17.2, "lat": -20.519732, "lng": -49.332387, "foto_url": "https://drive.google.com/file/d/1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU&sz=w400", "foto_id": "1S_NmNIdrBazhcB9OMHjb5V9noHdwSOQU", "status": null, "data_correcao": null, "problema": null}, {"id": 18, "filename": "DJI_0087_R_08_Voo05.JPG", "foto": "DJI_0087_R_08_Voo05.jpg", "anomalia": "hot-spot", "modulo": "07", "string": "ST-1.6.21.2", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673880.061, "y": 7730112.38, "temp_max": 52.1, "temp_min": 45.7, "delta": 6.4, "lat": -20.519767, "lng": -49.332386, "foto_url": "https://drive.google.com/file/d/1OqxS7pejhb2Z8skjIobgbnZn56XCyVFQ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1OqxS7pejhb2Z8skjIobgbnZn56XCyVFQ&sz=w400", "foto_id": "1OqxS7pejhb2Z8skjIobgbnZn56XCyVFQ", "status": null, "data_correcao": null, "problema": null}, {"id": 19, "filename": "DJI_0932_R_07_Voo05.JPG", "foto": "DJI_0932_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "02", "string": "ST-1.6.21.3", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673885.01, "y": 7730118.867, "temp_max": 46.6, "temp_min": 28.9, "delta": 17.7, "lat": -20.519708, "lng": -49.332339, "foto_url": "https://drive.google.com/file/d/1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM&sz=w400", "foto_id": "1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM", "status": null, "data_correcao": null, "problema": null}, {"id": 20, "filename": "DJI_0932_R_07_Voo05.JPG", "foto": "DJI_0932_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "03", "string": "ST-1.6.21.3", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673885.07, "y": 7730117.57, "temp_max": 38.6, "temp_min": 27.8, "delta": 10.8, "lat": -20.51972, "lng": -49.332339, "foto_url": "https://drive.google.com/file/d/1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM&sz=w400", "foto_id": "1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM", "status": null, "data_correcao": null, "problema": null}, {"id": 21, "filename": "DJI_0932_R_07_Voo05.JPG", "foto": "DJI_0932_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "04", "string": "ST-1.6.21.3", "tracker": "T-1.21", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673885.04, "y": 7730116.272, "temp_max": 70.7, "temp_min": 30.8, "delta": 39.9, "lat": -20.519732, "lng": -49.332339, "foto_url": "https://drive.google.com/file/d/1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM&sz=w400", "foto_id": "1EW8I5tbWh2-MxL6gsXzTgVzbFjoQcdnM", "status": null, "data_correcao": null, "problema": null}, {"id": 22, "filename": "DJI_0760_R_07_Voo05.JPG", "foto": "DJI_0760_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.6.22.6", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673895.109, "y": 7730122.041, "temp_max": 55.6, "temp_min": 25.6, "delta": 30, "lat": -20.519679, "lng": -49.332243, "foto_url": "https://drive.google.com/file/d/1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv&sz=w400", "foto_id": "1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv", "status": null, "data_correcao": null, "problema": null}, {"id": 23, "filename": "DJI_0762_R_07_Voo05.JPG", "foto": "DJI_0762_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "04", "string": "ST-1.6.22.6", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673895.053, "y": 7730118.03, "temp_max": 76.6, "temp_min": 30.1, "delta": 46.5, "lat": -20.519715, "lng": -49.332243, "foto_url": "https://drive.google.com/file/d/1_fHQS23oIdfemDJD5LeR4XxJ7bqk0Nuw/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1_fHQS23oIdfemDJD5LeR4XxJ7bqk0Nuw&sz=w400", "foto_id": "1_fHQS23oIdfemDJD5LeR4XxJ7bqk0Nuw", "status": null, "data_correcao": null, "problema": null}, {"id": 24, "filename": "DJI_0918_R_07_Voo05.JPG", "foto": "DJI_0918_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.6.22.5", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673890.046, "y": 7730121.982, "temp_max": 37.2, "temp_min": 24.0, "delta": 13.2, "lat": -20.51968, "lng": -49.332291, "foto_url": "https://drive.google.com/file/d/1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF&sz=w400", "foto_id": "1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF", "status": null, "data_correcao": null, "problema": null}, {"id": 25, "filename": "DJI_0918_R_07_Voo05.JPG", "foto": "DJI_0918_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "02", "string": "ST-1.6.22.5", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673889.988, "y": 7730120.708, "temp_max": 37.4, "temp_min": 27.6, "delta": 9.8, "lat": -20.519691, "lng": -49.332292, "foto_url": "https://drive.google.com/file/d/1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF&sz=w400", "foto_id": "1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF", "status": null, "data_correcao": null, "problema": null}, {"id": 26, "filename": "DJI_0918_R_07_Voo05.JPG", "foto": "DJI_0918_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "03", "string": "ST-1.6.22.5", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673889.988, "y": 7730119.441, "temp_max": 38.1, "temp_min": 28.6, "delta": 9.5, "lat": -20.519703, "lng": -49.332292, "foto_url": "https://drive.google.com/file/d/1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF&sz=w400", "foto_id": "1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF", "status": null, "data_correcao": null, "problema": null}, {"id": 27, "filename": "DJI_0918_R_07_Voo05.JPG", "foto": "DJI_0918_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "04", "string": "ST-1.6.22.5", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673890.019, "y": 7730117.992, "temp_max": 38.2, "temp_min": 25.6, "delta": 12.6, "lat": -20.519716, "lng": -49.332291, "foto_url": "https://drive.google.com/file/d/1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF&sz=w400", "foto_id": "1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF", "status": null, "data_correcao": null, "problema": null}, {"id": 28, "filename": "DJI_0918_R_07_Voo05.JPG", "foto": "DJI_0918_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "05", "string": "ST-1.6.22.5", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673890.109, "y": 7730116.785, "temp_max": 47.7, "temp_min": 37.4, "delta": 10.3, "lat": -20.519727, "lng": -49.33229, "foto_url": "https://drive.google.com/file/d/1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF&sz=w400", "foto_id": "1848vY4zOj1vpGuyDuU0OdNSW79-i5LBF", "status": null, "data_correcao": null, "problema": null}, {"id": 29, "filename": "DJI_0760_R_07_Voo05.JPG", "foto": "DJI_0760_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "02", "string": "ST-1.6.22.6", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673894.998, "y": 7730120.678, "temp_max": 84.9, "temp_min": 26.4, "delta": 58.5, "lat": -20.519691, "lng": -49.332244, "foto_url": "https://drive.google.com/file/d/1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv&sz=w400", "foto_id": "1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv", "status": null, "data_correcao": null, "problema": null}, {"id": 30, "filename": "DJI_0760_R_07_Voo05.JPG", "foto": "DJI_0760_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "03", "string": "ST-1.6.22.6", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673895.028, "y": 7730119.35, "temp_max": 80.3, "temp_min": 27.4, "delta": 52.9, "lat": -20.519703, "lng": -49.332243, "foto_url": "https://drive.google.com/file/d/1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv&sz=w400", "foto_id": "1L4mLuyP-guhqvXUCWHGPzP70Ij-UZyyv", "status": null, "data_correcao": null, "problema": null}, {"id": 31, "filename": "DJI_0762_R_07_Voo05.JPG", "foto": "DJI_0762_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "05", "string": "ST-1.6.22.6", "tracker": "T-1.22", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673895.058, "y": 7730116.755, "temp_max": 64.7, "temp_min": 40.0, "delta": 24.7, "lat": -20.519726, "lng": -49.332243, "foto_url": "https://drive.google.com/file/d/1_fHQS23oIdfemDJD5LeR4XxJ7bqk0Nuw/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1_fHQS23oIdfemDJD5LeR4XxJ7bqk0Nuw&sz=w400", "foto_id": "1_fHQS23oIdfemDJD5LeR4XxJ7bqk0Nuw", "status": null, "data_correcao": null, "problema": null}, {"id": 32, "filename": "DJI_0722_R_07_Voo05.JPG", "foto": "DJI_0722_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "12", "string": "ST-1.6.23.7", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673900.013, "y": 7730064.341, "temp_max": 61.0, "temp_min": 45.2, "delta": 15.8, "lat": -20.520199, "lng": -49.33219, "foto_url": "https://drive.google.com/file/d/11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6/view", "foto_thumb": "https://drive.google.com/thumbnail?id=11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6&sz=w400", "foto_id": "11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6", "status": null, "data_correcao": null, "problema": null}, {"id": 33, "filename": "DJI_0742_R_07_Voo05.JPG", "foto": "DJI_0742_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "02", "string": "ST-1.6.23.9", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673904.994, "y": 7730122.563, "temp_max": 52.3, "temp_min": 42.9, "delta": 9.4, "lat": -20.519673, "lng": -49.332148, "foto_url": "https://drive.google.com/file/d/1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA&sz=w400", "foto_id": "1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA", "status": null, "data_correcao": null, "problema": null}, {"id": 34, "filename": "DJI_0744_R_07_Voo05.JPG", "foto": "DJI_0744_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.6.23.8", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673900.022, "y": 7730123.857, "temp_max": 74.1, "temp_min": 40.8, "delta": 33.3, "lat": -20.519662, "lng": -49.332196, "foto_url": "https://drive.google.com/file/d/1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE&sz=w400", "foto_id": "1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE", "status": null, "data_correcao": null, "problema": null}, {"id": 35, "filename": "DJI_0722_R_07_Voo05.JPG", "foto": "DJI_0722_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "11", "string": "ST-1.6.23.7", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673900.007, "y": 7730065.668, "temp_max": 53.3, "temp_min": 33.6, "delta": 19.7, "lat": -20.520187, "lng": -49.33219, "foto_url": "https://drive.google.com/file/d/11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6/view", "foto_thumb": "https://drive.google.com/thumbnail?id=11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6&sz=w400", "foto_id": "11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6", "status": null, "data_correcao": null, "problema": null}, {"id": 36, "filename": "DJI_0722_R_07_Voo05.JPG", "foto": "DJI_0722_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "10", "string": "ST-1.6.23.7", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673899.977, "y": 7730066.966, "temp_max": 52.6, "temp_min": 45.6, "delta": 7, "lat": -20.520176, "lng": -49.332191, "foto_url": "https://drive.google.com/file/d/11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6/view", "foto_thumb": "https://drive.google.com/thumbnail?id=11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6&sz=w400", "foto_id": "11RjxiYYc9lQo3kG1ntYX5vFCFy3mZ4t6", "status": null, "data_correcao": null, "problema": null}, {"id": 37, "filename": "DJI_0744_R_07_Voo05.JPG", "foto": "DJI_0744_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "02", "string": "ST-1.6.23.8", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673900.067, "y": 7730122.519, "temp_max": 62.5, "temp_min": 40.8, "delta": 21.7, "lat": -20.519674, "lng": -49.332195, "foto_url": "https://drive.google.com/file/d/1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE&sz=w400", "foto_id": "1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE", "status": null, "data_correcao": null, "problema": null}, {"id": 38, "filename": "DJI_0744_R_07_Voo05.JPG", "foto": "DJI_0744_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "03", "string": "ST-1.6.23.8", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673900.067, "y": 7730121.161, "temp_max": 66.8, "temp_min": 42.0, "delta": 24.8, "lat": -20.519686, "lng": -49.332195, "foto_url": "https://drive.google.com/file/d/1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE&sz=w400", "foto_id": "1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE", "status": null, "data_correcao": null, "problema": null}, {"id": 39, "filename": "DJI_0744_R_07_Voo05.JPG", "foto": "DJI_0744_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "04", "string": "ST-1.6.23.8", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673900.067, "y": 7730119.833, "temp_max": 50.1, "temp_min": 43.0, "delta": 7.1, "lat": -20.519698, "lng": -49.332195, "foto_url": "https://drive.google.com/file/d/1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE&sz=w400", "foto_id": "1ae3DSbHzATUErgJ7xanKb3ij5OMlIUBE", "status": null, "data_correcao": null, "problema": null}, {"id": 40, "filename": "DJI_0742_R_07_Voo05.JPG", "foto": "DJI_0742_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.6.23.9", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673904.986, "y": 7730121.131, "temp_max": 60.1, "temp_min": 44.3, "delta": 15.8, "lat": -20.519686, "lng": -49.332148, "foto_url": "https://drive.google.com/file/d/1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA&sz=w400", "foto_id": "1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA", "status": null, "data_correcao": null, "problema": null}, {"id": 41, "filename": "DJI_0742_R_07_Voo05.JPG", "foto": "DJI_0742_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-1.6.23.9", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673905.016, "y": 7730119.863, "temp_max": 56.9, "temp_min": 44.7, "delta": 12.2, "lat": -20.519697, "lng": -49.332148, "foto_url": "https://drive.google.com/file/d/1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA&sz=w400", "foto_id": "1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA", "status": null, "data_correcao": null, "problema": null}, {"id": 42, "filename": "DJI_0742_R_07_Voo05.JPG", "foto": "DJI_0742_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "05", "string": "ST-1.6.23.9", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673904.955, "y": 7730118.626, "temp_max": 50.9, "temp_min": 45.1, "delta": 5.8, "lat": -20.519709, "lng": -49.332148, "foto_url": "https://drive.google.com/file/d/1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA&sz=w400", "foto_id": "1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA", "status": null, "data_correcao": null, "problema": null}, {"id": 43, "filename": "DJI_0742_R_07_Voo05.JPG", "foto": "DJI_0742_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "06", "string": "ST-1.6.23.9", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673904.955, "y": 7730117.238, "temp_max": 51.1, "temp_min": 45.4, "delta": 5.7, "lat": -20.519721, "lng": -49.332148, "foto_url": "https://drive.google.com/file/d/1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA&sz=w400", "foto_id": "1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA", "status": null, "data_correcao": null, "problema": null}, {"id": 44, "filename": "DJI_0742_R_07_Voo05.JPG", "foto": "DJI_0742_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "07", "string": "ST-1.6.23.9", "tracker": "T-1.23", "inversor": "INV-1.06", "skid": "SKID 1", "x": 673905.016, "y": 7730115.94, "temp_max": 52.1, "temp_min": 45.6, "delta": 6.5, "lat": -20.519733, "lng": -49.332147, "foto_url": "https://drive.google.com/file/d/1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA&sz=w400", "foto_id": "1qOgzbzBBMfrwW9uREVNiRZBehoYvsetA", "status": null, "data_correcao": null, "problema": null}, {"id": 45, "filename": "DJI_0414_R_07_Voo05.JPG", "foto": "DJI_0414_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.7.25.3", "tracker": "T-1.25", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673925.1, "y": 7730127.336, "temp_max": 35.0, "temp_min": 24.5, "delta": 10.5, "lat": -20.519628, "lng": -49.331956, "foto_url": "https://drive.google.com/file/d/1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK&sz=w400", "foto_id": "1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK", "status": null, "data_correcao": null, "problema": null}, {"id": 46, "filename": "DJI_0426_R_07_Voo05.JPG", "foto": "DJI_0414_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.7.25.2", "tracker": "T-1.25", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673920.005, "y": 7730127.394, "temp_max": 35.9, "temp_min": 25.0, "delta": 10.9, "lat": -20.519628, "lng": -49.332005, "foto_url": "https://drive.google.com/file/d/1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK&sz=w400", "foto_id": "1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK", "status": null, "data_correcao": null, "problema": null}, {"id": 47, "filename": "DJI_0444_R_07_Voo05.JPG", "foto": "DJI_0226_R_07_Voo05.jpg", "anomalia": "open diode", "modulo": "34", "string": "ST-1.7.25.3", "tracker": "T-1.25", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673924.882, "y": 7730083.743, "temp_max": 58.2, "temp_min": 45.0, "delta": 13.2, "lat": -20.520022, "lng": -49.331954, "foto_url": "https://drive.google.com/file/d/195xWc3QVMB8cd7GI3aoN9WRBqzwN83sk/view", "foto_thumb": "https://drive.google.com/thumbnail?id=195xWc3QVMB8cd7GI3aoN9WRBqzwN83sk&sz=w400", "foto_id": "195xWc3QVMB8cd7GI3aoN9WRBqzwN83sk", "status": null, "data_correcao": null, "problema": null}, {"id": 48, "filename": "DJI_0426_R_07_Voo05.JPG", "foto": "DJI_0414_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "02", "string": "ST-1.7.25.2", "tracker": "T-1.25", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673920.013, "y": 7730126.019, "temp_max": 44.9, "temp_min": 24.4, "delta": 20.5, "lat": -20.51964, "lng": -49.332004, "foto_url": "https://drive.google.com/file/d/1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK&sz=w400", "foto_id": "1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK", "status": null, "data_correcao": null, "problema": null}, {"id": 49, "filename": "DJI_0426_R_07_Voo05.JPG", "foto": "DJI_0414_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "03", "string": "ST-1.7.25.2", "tracker": "T-1.25", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673919.953, "y": 7730124.722, "temp_max": 75.1, "temp_min": 28.1, "delta": 47, "lat": -20.519652, "lng": -49.332005, "foto_url": "https://drive.google.com/file/d/1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK&sz=w400", "foto_id": "1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK", "status": null, "data_correcao": null, "problema": null}, {"id": 50, "filename": "DJI_0414_R_07_Voo05.JPG", "foto": "DJI_0414_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "02", "string": "ST-1.7.25.3", "tracker": "T-1.25", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673925.113, "y": 7730125.989, "temp_max": 62.7, "temp_min": 31.4, "delta": 31.3, "lat": -20.51964, "lng": -49.331956, "foto_url": "https://drive.google.com/file/d/1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK&sz=w400", "foto_id": "1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK", "status": null, "data_correcao": null, "problema": null}, {"id": 51, "filename": "DJI_0414_R_07_Voo05.JPG", "foto": "DJI_0414_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "03", "string": "ST-1.7.25.3", "tracker": "T-1.25", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673925.143, "y": 7730124.691, "temp_max": 63.4, "temp_min": 43.1, "delta": 20.3, "lat": -20.519652, "lng": -49.331955, "foto_url": "https://drive.google.com/file/d/1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK&sz=w400", "foto_id": "1gq6DAStgswy4j_Z3gmiSHes5qQxCqQRK", "status": null, "data_correcao": null, "problema": null}, {"id": 52, "filename": "DJI_0226_R_07_Voo05.JPG", "foto": "DJI_0226_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "27", "string": "ST-1.7.26.4", "tracker": "T-1.26", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673935.103, "y": 7730072.292, "temp_max": 51.5, "temp_min": 44.8, "delta": 6.7, "lat": -20.520124, "lng": -49.331855, "foto_url": "https://drive.google.com/file/d/195xWc3QVMB8cd7GI3aoN9WRBqzwN83sk/view", "foto_thumb": "https://drive.google.com/thumbnail?id=195xWc3QVMB8cd7GI3aoN9WRBqzwN83sk&sz=w400", "foto_id": "195xWc3QVMB8cd7GI3aoN9WRBqzwN83sk", "status": null, "data_correcao": null, "problema": null}, {"id": 53, "filename": "DJI_0248_R_07_Voo05.JPG", "foto": "DJI_0248_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.7.26.6", "tracker": "T-1.26", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673935.17, "y": 7730126.74, "temp_max": 54.5, "temp_min": 45.9, "delta": 8.6, "lat": -20.519632, "lng": -49.331859, "foto_url": "https://drive.google.com/file/d/1lGT0DE9GVA1qgQIGkn8t6d7EbIQp1qu_/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1lGT0DE9GVA1qgQIGkn8t6d7EbIQp1qu_&sz=w400", "foto_id": "1lGT0DE9GVA1qgQIGkn8t6d7EbIQp1qu_", "status": null, "data_correcao": null, "problema": null}, {"id": 54, "filename": "DJI_0262_R_07_Voo05.JPG", "foto": "DJI_0262_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.7.26.5", "tracker": "T-1.26", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673930.126, "y": 7730129.18, "temp_max": 86.4, "temp_min": 35.1, "delta": 51.3, "lat": -20.519611, "lng": -49.331908, "foto_url": "https://drive.google.com/file/d/12689L6HQZvWOv8g7LprEc9EFOLlv6d1C/view", "foto_thumb": "https://drive.google.com/thumbnail?id=12689L6HQZvWOv8g7LprEc9EFOLlv6d1C&sz=w400", "foto_id": "12689L6HQZvWOv8g7LprEc9EFOLlv6d1C", "status": null, "data_correcao": null, "problema": null}, {"id": 55, "filename": "DJI_0282_R_07_Voo05.JPG", "foto": "DJI_0262_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "07", "string": "ST-1.7.26.4", "tracker": "T-1.26", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673929.997, "y": 7730076.299, "temp_max": 53.7, "temp_min": 46.8, "delta": 6.9, "lat": -20.520089, "lng": -49.331904, "foto_url": "https://drive.google.com/file/d/12689L6HQZvWOv8g7LprEc9EFOLlv6d1C/view", "foto_thumb": "https://drive.google.com/thumbnail?id=12689L6HQZvWOv8g7LprEc9EFOLlv6d1C&sz=w400", "foto_id": "12689L6HQZvWOv8g7LprEc9EFOLlv6d1C", "status": null, "data_correcao": null, "problema": null}, {"id": 56, "filename": "DJI_0262_R_07_Voo05.JPG", "foto": "DJI_0262_R_07_Voo05.jpg", "anomalia": "shadow", "modulo": "02", "string": "ST-1.7.26.5", "tracker": "T-1.26", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673930.092, "y": 7730127.86, "temp_max": 77.6, "temp_min": 45.2, "delta": 32.4, "lat": -20.519623, "lng": -49.331908, "foto_url": "https://drive.google.com/file/d/12689L6HQZvWOv8g7LprEc9EFOLlv6d1C/view", "foto_thumb": "https://drive.google.com/thumbnail?id=12689L6HQZvWOv8g7LprEc9EFOLlv6d1C&sz=w400", "foto_id": "12689L6HQZvWOv8g7LprEc9EFOLlv6d1C", "status": null, "data_correcao": null, "problema": null}, {"id": 57, "filename": "DJI_0248_R_07_Voo05.JPG", "foto": "DJI_0248_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "05", "string": "ST-1.7.26.6", "tracker": "T-1.26", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673935.071, "y": 7730123.877, "temp_max": 49.7, "temp_min": 45.3, "delta": 4.4, "lat": -20.519658, "lng": -49.33186, "foto_url": "https://drive.google.com/file/d/1lGT0DE9GVA1qgQIGkn8t6d7EbIQp1qu_/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1lGT0DE9GVA1qgQIGkn8t6d7EbIQp1qu_&sz=w400", "foto_id": "1lGT0DE9GVA1qgQIGkn8t6d7EbIQp1qu_", "status": null, "data_correcao": null, "problema": null}, {"id": 58, "filename": "DJI_0230_R_07_Voo05.JPG", "foto": "DJI_0230_R_07_Voo05.jpg", "anomalia": "open diode", "modulo": "04", "string": "ST-1.7.27.7", "tracker": "T-1.27", "inversor": "INV-1.07", "skid": "SKID 1", "x": 673940.095, "y": 7730082.095, "temp_max": 58.6, "temp_min": 47.7, "delta": 10.9, "lat": -20.520035, "lng": -49.331808, "foto_url": "https://drive.google.com/file/d/1bplQkd_Ae4HpNKLYTAjR4BKdOxbPgeOi/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1bplQkd_Ae4HpNKLYTAjR4BKdOxbPgeOi&sz=w400", "foto_id": "1bplQkd_Ae4HpNKLYTAjR4BKdOxbPgeOi", "status": null, "data_correcao": null, "problema": null}, {"id": 59, "filename": "DJI_0267_R_06_Voo04.JPG", "foto": "DJI_0267_R_06_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "28", "string": "ST-1.9.33.3", "tracker": "T-1.33", "inversor": "INV-1.09", "skid": "SKID 1", "x": 674005.093, "y": 7730104.573, "temp_max": 72.2, "temp_min": 42.4, "delta": 29.8, "lat": -20.519826, "lng": -49.331187, "foto_url": "https://drive.google.com/file/d/1Pv0UoyzQkYQMPkdlvRvcrWmjXCniRidF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1Pv0UoyzQkYQMPkdlvRvcrWmjXCniRidF&sz=w400", "foto_id": "1Pv0UoyzQkYQMPkdlvRvcrWmjXCniRidF", "status": null, "data_correcao": null, "problema": null}, {"id": 60, "filename": "DJI_0980_R_05_Voo04.JPG", "foto": "DJI_0980_R_05_Voo04.jpg", "anomalia": "hot-spot", "modulo": "12", "string": "ST-1.9.35.7", "tracker": "T-1.35", "inversor": "INV-1.09", "skid": "SKID 1", "x": 674020.065, "y": 7730083.968, "temp_max": 48.9, "temp_min": 40.4, "delta": 8.5, "lat": -20.520011, "lng": -49.331041, "foto_url": "https://drive.google.com/file/d/1XLPAcMej8mBVDFFgYoG2kR4PpjjvZSWW/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1XLPAcMej8mBVDFFgYoG2kR4PpjjvZSWW&sz=w400", "foto_id": "1XLPAcMej8mBVDFFgYoG2kR4PpjjvZSWW", "status": null, "data_correcao": null, "problema": null}, {"id": 61, "filename": "DJI_0622_R_05_Voo04.JPG", "foto": "DJI_0622_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.10.37.3", "tracker": "T-1.37", "inversor": "INV-1.10", "skid": "SKID 1", "x": 674045.113, "y": 7730143.806, "temp_max": 53.4, "temp_min": 42.3, "delta": 11.1, "lat": -20.519468, "lng": -49.330807, "foto_url": "https://drive.google.com/file/d/19ArTw3rQgv0XOjqx1kE_46fR8d_D1tKp/view", "foto_thumb": "https://drive.google.com/thumbnail?id=19ArTw3rQgv0XOjqx1kE_46fR8d_D1tKp&sz=w400", "foto_id": "19ArTw3rQgv0XOjqx1kE_46fR8d_D1tKp", "status": null, "data_correcao": null, "problema": null}, {"id": 62, "filename": "DJI_0454_R_05_Voo04.JPG", "foto": "DJI_0454_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.10.38.6", "tracker": "T-1.38", "inversor": "INV-1.10", "skid": "SKID 1", "x": 674055.054, "y": 7730145.26, "temp_max": 48.5, "temp_min": 39.8, "delta": 8.7, "lat": -20.519454, "lng": -49.330712, "foto_url": "https://drive.google.com/file/d/1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT&sz=w400", "foto_id": "1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT", "status": null, "data_correcao": null, "problema": null}, {"id": 63, "filename": "DJI_0454_R_05_Voo04.JPG", "foto": "DJI_0454_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.10.38.5", "tracker": "T-1.38", "inversor": "INV-1.10", "skid": "SKID 1", "x": 674050.039, "y": 7730145.241, "temp_max": 48.2, "temp_min": 40.5, "delta": 7.7, "lat": -20.519455, "lng": -49.33076, "foto_url": "https://drive.google.com/file/d/1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT&sz=w400", "foto_id": "1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT", "status": null, "data_correcao": null, "problema": null}, {"id": 64, "filename": "DJI_0454_R_05_Voo04.JPG", "foto": "DJI_0454_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-1.10.38.5", "tracker": "T-1.38", "inversor": "INV-1.10", "skid": "SKID 1", "x": 674050.099, "y": 7730143.853, "temp_max": 48.3, "temp_min": 40.2, "delta": 8.1, "lat": -20.519467, "lng": -49.330759, "foto_url": "https://drive.google.com/file/d/1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT&sz=w400", "foto_id": "1ZIdoBkxF5M3i6TE9BFPMrLY253NA5mxT", "status": null, "data_correcao": null, "problema": null}, {"id": 65, "filename": "DJI_0444_R_05_Voo04.JPG", "foto": "DJI_0444_R_05_Voo04.jpg", "anomalia": "shadow", "modulo": "01", "string": "ST-1.10.39.8", "tracker": "T-1.39", "inversor": "INV-1.10", "skid": "SKID 1", "x": 674060.088, "y": 7730149.394, "temp_max": 60.0, "temp_min": 29.2, "delta": 30.8, "lat": -20.519416, "lng": -49.330664, "foto_url": "https://drive.google.com/file/d/1OnD65sqx1IlgKITCdLTFtCRB9axg61FW/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1OnD65sqx1IlgKITCdLTFtCRB9axg61FW&sz=w400", "foto_id": "1OnD65sqx1IlgKITCdLTFtCRB9axg61FW", "status": null, "data_correcao": null, "problema": null}, {"id": 66, "filename": "DJI_0110_R_05_Voo03.JPG", "foto": "DJI_0110_R_05_Voo03.jpg", "anomalia": "open diode", "modulo": "18", "string": "ST-1.11.41.2", "tracker": "T-1.41", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674085.025, "y": 7730130.043, "temp_max": 58.0, "temp_min": 43.8, "delta": 14.2, "lat": -20.519589, "lng": -49.330423, "foto_url": "https://drive.google.com/file/d/1oUey_ZbRvCVALRWPrl3Mey0rsATPKixY/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1oUey_ZbRvCVALRWPrl3Mey0rsATPKixY&sz=w400", "foto_id": "1oUey_ZbRvCVALRWPrl3Mey0rsATPKixY", "status": null, "data_correcao": null, "problema": null}, {"id": 67, "filename": "DJI_0136_R_05_Voo03.JPG", "foto": "DJI_0136_R_05_Voo03.jpg", "anomalia": "open diode", "modulo": "12", "string": "ST-1.11.41.1", "tracker": "T-1.41", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674079.968, "y": 7730137.942, "temp_max": 57.6, "temp_min": 44.1, "delta": 13.5, "lat": -20.519518, "lng": -49.330472, "foto_url": "https://drive.google.com/file/d/17iYyBUn_Kp0cYU6UBoHFGtvcAssYvYFj/view", "foto_thumb": "https://drive.google.com/thumbnail?id=17iYyBUn_Kp0cYU6UBoHFGtvcAssYvYFj&sz=w400", "foto_id": "17iYyBUn_Kp0cYU6UBoHFGtvcAssYvYFj", "status": null, "data_correcao": null, "problema": null}, {"id": 68, "filename": "DJI_0781_R_04_Voo03.JPG", "foto": "DJI_0781_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "05", "string": "ST-1.11.43.8", "tracker": "T-1.43", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674105.107, "y": 7730150.142, "temp_max": 53.7, "temp_min": 47.0, "delta": 6.7, "lat": -20.519405, "lng": -49.330232, "foto_url": "https://drive.google.com/file/d/1bece3diut9TgDtjdWqjwa_xDPSditVu8/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1bece3diut9TgDtjdWqjwa_xDPSditVu8&sz=w400", "foto_id": "1bece3diut9TgDtjdWqjwa_xDPSditVu8", "status": null, "data_correcao": null, "problema": null}, {"id": 69, "filename": "DJI_0795_R_04_Voo03.JPG", "foto": "DJI_0795_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-1.11.43.7", "tracker": "T-1.43", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674100.048, "y": 7730152.671, "temp_max": 51.6, "temp_min": 44.9, "delta": 6.7, "lat": -20.519383, "lng": -49.330281, "foto_url": "https://drive.google.com/file/d/1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP&sz=w400", "foto_id": "1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP", "status": null, "data_correcao": null, "problema": null}, {"id": 70, "filename": "DJI_0781_R_04_Voo03.JPG", "foto": "DJI_0781_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "06", "string": "ST-1.11.43.8", "tracker": "T-1.43", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674105.064, "y": 7730148.771, "temp_max": 52.4, "temp_min": 47.5, "delta": 4.9, "lat": -20.519418, "lng": -49.330232, "foto_url": "https://drive.google.com/file/d/1bece3diut9TgDtjdWqjwa_xDPSditVu8/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1bece3diut9TgDtjdWqjwa_xDPSditVu8&sz=w400", "foto_id": "1bece3diut9TgDtjdWqjwa_xDPSditVu8", "status": null, "data_correcao": null, "problema": null}, {"id": 71, "filename": "DJI_0781_R_04_Voo03.JPG", "foto": "DJI_0781_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "07", "string": "ST-1.11.43.8", "tracker": "T-1.43", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674105.003, "y": 7730147.444, "temp_max": 52.9, "temp_min": 47.7, "delta": 5.2, "lat": -20.51943, "lng": -49.330233, "foto_url": "https://drive.google.com/file/d/1bece3diut9TgDtjdWqjwa_xDPSditVu8/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1bece3diut9TgDtjdWqjwa_xDPSditVu8&sz=w400", "foto_id": "1bece3diut9TgDtjdWqjwa_xDPSditVu8", "status": null, "data_correcao": null, "problema": null}, {"id": 72, "filename": "DJI_0795_R_04_Voo03.JPG", "foto": "DJI_0795_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-1.11.43.7", "tracker": "T-1.43", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674100.024, "y": 7730151.366, "temp_max": 53.5, "temp_min": 47.0, "delta": 6.5, "lat": -20.519395, "lng": -49.330281, "foto_url": "https://drive.google.com/file/d/1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP&sz=w400", "foto_id": "1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP", "status": null, "data_correcao": null, "problema": null}, {"id": 73, "filename": "DJI_0795_R_04_Voo03.JPG", "foto": "DJI_0795_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "06", "string": "ST-1.11.43.7", "tracker": "T-1.43", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674100.024, "y": 7730148.801, "temp_max": 52.2, "temp_min": 46.4, "delta": 5.8, "lat": -20.519418, "lng": -49.330281, "foto_url": "https://drive.google.com/file/d/1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP&sz=w400", "foto_id": "1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP", "status": null, "data_correcao": null, "problema": null}, {"id": 74, "filename": "DJI_0795_R_04_Voo03.JPG", "foto": "DJI_0795_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "07", "string": "ST-1.11.43.7", "tracker": "T-1.43", "inversor": "INV-1.11", "skid": "SKID 1", "x": 674099.934, "y": 7730147.504, "temp_max": 50.5, "temp_min": 44.7, "delta": 5.8, "lat": -20.51943, "lng": -49.330282, "foto_url": "https://drive.google.com/file/d/1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP&sz=w400", "foto_id": "1cEqysb-_9f_fIDydrrHhdBWYH7e1DNAP", "status": null, "data_correcao": null, "problema": null}, {"id": 75, "filename": "DJI_0615_R_04_Voo03.JPG", "foto": "DJI_0615_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "02", "string": "ST-1.11.44.11", "tracker": "T-1.44", "inversor": "INV-1.12", "skid": "SKID 1", "x": 674115.052, "y": 7730155.549, "temp_max": 50.2, "temp_min": 45.2, "delta": 5, "lat": -20.519356, "lng": -49.330137, "foto_url": "https://drive.google.com/file/d/1JVO6Kw57d8ObpvI-lTY1H9MDbgV8Ai_I/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1JVO6Kw57d8ObpvI-lTY1H9MDbgV8Ai_I&sz=w400", "foto_id": "1JVO6Kw57d8ObpvI-lTY1H9MDbgV8Ai_I", "status": null, "data_correcao": null, "problema": null}, {"id": 76, "filename": "DJI_0629_R_04_Voo03.JPG", "foto": "DJI_0629_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "02", "string": "ST-1.11.44.10", "tracker": "T-1.44", "inversor": "INV-1.12", "skid": "SKID 1", "x": 674110.071, "y": 7730155.546, "temp_max": 50.9, "temp_min": 44.2, "delta": 6.7, "lat": -20.519356, "lng": -49.330185, "foto_url": "https://drive.google.com/file/d/10l9qn934TAlL1u2smK-pXHwBxElRH4NV/view", "foto_thumb": "https://drive.google.com/thumbnail?id=10l9qn934TAlL1u2smK-pXHwBxElRH4NV&sz=w400", "foto_id": "10l9qn934TAlL1u2smK-pXHwBxElRH4NV", "status": null, "data_correcao": null, "problema": null}, {"id": 77, "filename": "DJI_0647_R_04_Voo03.JPG", "foto": "DJI_0647_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "07", "string": "ST-1.11.44.9", "tracker": "T-1.44", "inversor": "INV-1.12", "skid": "SKID 1", "x": 674110.038, "y": 7730103.932, "temp_max": 63.8, "temp_min": 43.8, "delta": 20, "lat": -20.519822, "lng": -49.33018, "foto_url": "https://drive.google.com/file/d/17jHIn2n-F3ul8BAIkeQPZIvT-9gv_oPy/view", "foto_thumb": "https://drive.google.com/thumbnail?id=17jHIn2n-F3ul8BAIkeQPZIvT-9gv_oPy&sz=w400", "foto_id": "17jHIn2n-F3ul8BAIkeQPZIvT-9gv_oPy", "status": null, "data_correcao": null, "problema": null}, {"id": 78, "filename": "DJI_0629_R_04_Voo03.JPG", "foto": "DJI_0629_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-1.11.44.10", "tracker": "T-1.44", "inversor": "INV-1.12", "skid": "SKID 1", "x": 674110.043, "y": 7730152.936, "temp_max": 61.4, "temp_min": 46.3, "delta": 15.1, "lat": -20.51938, "lng": -49.330185, "foto_url": "https://drive.google.com/file/d/10l9qn934TAlL1u2smK-pXHwBxElRH4NV/view", "foto_thumb": "https://drive.google.com/thumbnail?id=10l9qn934TAlL1u2smK-pXHwBxElRH4NV&sz=w400", "foto_id": "10l9qn934TAlL1u2smK-pXHwBxElRH4NV", "status": null, "data_correcao": null, "problema": null}, {"id": 79, "filename": "DJI_0036_R_01_Voo01.JPG", "foto": "DJI_0036_R_01_Voo01.jpg", "anomalia": "multi hot-spot", "modulo": "34", "string": "ST-2.2.59.9", "tracker": "T-2.59", "inversor": "INV-2.02", "skid": "SKID 2", "x": 674365.9, "y": 7730039.657, "temp_max": 51.4, "temp_min": 43.9, "delta": 7.5, "lat": -20.520379, "lng": -49.327721, "foto_url": "https://drive.google.com/file/d/1QagTJSoHKF_PvwBbRfPsXXP-omPZZjv1/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1QagTJSoHKF_PvwBbRfPsXXP-omPZZjv1&sz=w400", "foto_id": "1QagTJSoHKF_PvwBbRfPsXXP-omPZZjv1", "status": null, "data_correcao": null, "problema": null}, {"id": 80, "filename": "DJI_0036_R_01_Voo01.JPG", "foto": "DJI_0036_R_01_Voo01.jpg", "anomalia": "multi hot-spot", "modulo": "34", "string": "ST-2.2.60.12", "tracker": "T-2.60", "inversor": "INV-2.02", "skid": "SKID 2", "x": 674355.736, "y": 7730038.179, "temp_max": 50.0, "temp_min": 45.8, "delta": 4.2, "lat": -20.520394, "lng": -49.327818, "foto_url": "https://drive.google.com/file/d/1QagTJSoHKF_PvwBbRfPsXXP-omPZZjv1/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1QagTJSoHKF_PvwBbRfPsXXP-omPZZjv1&sz=w400", "foto_id": "1QagTJSoHKF_PvwBbRfPsXXP-omPZZjv1", "status": null, "data_correcao": null, "problema": null}, {"id": 81, "filename": "DJI_0673_R_02_Voo02.JPG", "foto": "DJI_0673_R_02_Voo02.jpg", "anomalia": "hot-spot", "modulo": "34", "string": "ST-2.3.104.1", "tracker": "T-2.104", "inversor": "INV-2.03", "skid": "SKID 2", "x": 674250.271, "y": 7730033.206, "temp_max": 37.3, "temp_min": 33.1, "delta": 4.2, "lat": -20.520448, "lng": -49.328829, "foto_url": "https://drive.google.com/file/d/1ehyqIUxh7Jydqd39j2w0ThMYCpRzE6zC/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ehyqIUxh7Jydqd39j2w0ThMYCpRzE6zC&sz=w400", "foto_id": "1ehyqIUxh7Jydqd39j2w0ThMYCpRzE6zC", "status": null, "data_correcao": null, "problema": null}, {"id": 82, "filename": "DJI_0673_R_02_Voo02.JPG", "foto": "DJI_0673_R_02_Voo02.jpg", "anomalia": "hot-spot", "modulo": "34", "string": "ST-2.3.104.2", "tracker": "T-2.104", "inversor": "INV-2.03", "skid": "SKID 2", "x": 674245.138, "y": 7730033.2, "temp_max": 36.4, "temp_min": 32.7, "delta": 3.7, "lat": -20.520449, "lng": -49.328878, "foto_url": "https://drive.google.com/file/d/1ehyqIUxh7Jydqd39j2w0ThMYCpRzE6zC/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1ehyqIUxh7Jydqd39j2w0ThMYCpRzE6zC&sz=w400", "foto_id": "1ehyqIUxh7Jydqd39j2w0ThMYCpRzE6zC", "status": null, "data_correcao": null, "problema": null}, {"id": 83, "filename": "DJI_0371_R_08_Voo05.JPG", "foto": "DJI_0371_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "19", "string": "ST-2.4.64.3", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673855.418, "y": 7729967.49, "temp_max": 58.3, "temp_min": 47.5, "delta": 10.8, "lat": -20.521078, "lng": -49.332608, "foto_url": "https://drive.google.com/file/d/1pzenhSekVUWBeWvKrOMSkOvueDbxhVqX/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1pzenhSekVUWBeWvKrOMSkOvueDbxhVqX&sz=w400", "foto_id": "1pzenhSekVUWBeWvKrOMSkOvueDbxhVqX", "status": null, "data_correcao": null, "problema": null}, {"id": 84, "filename": "DJI_0379_R_08_Voo05.JPG", "foto": "DJI_0379_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "02", "string": "ST-2.4.64.3", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673855.558, "y": 7729990.171, "temp_max": 54.4, "temp_min": 48.5, "delta": 5.9, "lat": -20.520873, "lng": -49.332609, "foto_url": "https://drive.google.com/file/d/17RxjHuiTyzJbXClR2Egala-odbCRG2JB/view", "foto_thumb": "https://drive.google.com/thumbnail?id=17RxjHuiTyzJbXClR2Egala-odbCRG2JB&sz=w400", "foto_id": "17RxjHuiTyzJbXClR2Egala-odbCRG2JB", "status": null, "data_correcao": null, "problema": null}, {"id": 85, "filename": "DJI_0479_R_08_Voo05.JPG", "foto": "DJI_0479_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "02", "string": "ST-2.4.64.2", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673850.465, "y": 7729990.292, "temp_max": 91.7, "temp_min": 48.0, "delta": 43.7, "lat": -20.520873, "lng": -49.332658, "foto_url": "https://drive.google.com/file/d/1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB&sz=w400", "foto_id": "1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB", "status": null, "data_correcao": null, "problema": null}, {"id": 86, "filename": "DJI_0481_R_08_Voo05.JPG", "foto": "DJI_0481_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "08", "string": "ST-2.4.64.2", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673850.485, "y": 7729982.331, "temp_max": 58.8, "temp_min": 47.8, "delta": 11, "lat": -20.520945, "lng": -49.332657, "foto_url": "https://drive.google.com/file/d/1etjQnNEtq9gDvvjmjOHXJYPcaWrNsVVf/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1etjQnNEtq9gDvvjmjOHXJYPcaWrNsVVf&sz=w400", "foto_id": "1etjQnNEtq9gDvvjmjOHXJYPcaWrNsVVf", "status": null, "data_correcao": null, "problema": null}, {"id": 87, "filename": "DJI_0483_R_08_Voo05.JPG", "foto": "DJI_0483_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "12", "string": "ST-2.4.64.2", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673850.459, "y": 7729976.758, "temp_max": 59.4, "temp_min": 47.0, "delta": 12.4, "lat": -20.520995, "lng": -49.332657, "foto_url": "https://drive.google.com/file/d/1BWNquYupoNMEfMhixwVlU4pAvroWK0Sy/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1BWNquYupoNMEfMhixwVlU4pAvroWK0Sy&sz=w400", "foto_id": "1BWNquYupoNMEfMhixwVlU4pAvroWK0Sy", "status": null, "data_correcao": null, "problema": null}, {"id": 88, "filename": "DJI_0487_R_08_Voo05.JPG", "foto": "DJI_0487_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "17", "string": "ST-2.4.64.2", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673850.398, "y": 7729970.167, "temp_max": 55.1, "temp_min": 48.4, "delta": 6.7, "lat": -20.521055, "lng": -49.332657, "foto_url": "https://drive.google.com/file/d/1LE9-EY_Lyxq5pw-UWQoQ0Zxn64PL7TbG/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1LE9-EY_Lyxq5pw-UWQoQ0Zxn64PL7TbG&sz=w400", "foto_id": "1LE9-EY_Lyxq5pw-UWQoQ0Zxn64PL7TbG", "status": null, "data_correcao": null, "problema": null}, {"id": 89, "filename": "DJI_0479_R_08_Voo05.JPG", "foto": "DJI_0479_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-2.4.64.2", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673850.399, "y": 7729988.796, "temp_max": 62.8, "temp_min": 47.7, "delta": 15.1, "lat": -20.520886, "lng": -49.332658, "foto_url": "https://drive.google.com/file/d/1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB&sz=w400", "foto_id": "1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB", "status": null, "data_correcao": null, "problema": null}, {"id": 90, "filename": "DJI_0479_R_08_Voo05.JPG", "foto": "DJI_0479_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-2.4.64.2", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673850.399, "y": 7729987.475, "temp_max": 57.7, "temp_min": 46.4, "delta": 11.3, "lat": -20.520898, "lng": -49.332658, "foto_url": "https://drive.google.com/file/d/1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB&sz=w400", "foto_id": "1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB", "status": null, "data_correcao": null, "problema": null}, {"id": 91, "filename": "DJI_0479_R_08_Voo05.JPG", "foto": "DJI_0479_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "05", "string": "ST-2.4.64.2", "tracker": "T-2.64", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673850.47, "y": 7729986.189, "temp_max": 59.1, "temp_min": 47.7, "delta": 11.4, "lat": -20.52091, "lng": -49.332658, "foto_url": "https://drive.google.com/file/d/1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB&sz=w400", "foto_id": "1LWrWPrXC94Z0cA_s-TrkAgr93nFE3_kB", "status": null, "data_correcao": null, "problema": null}, {"id": 92, "filename": "DJI_0323_R_08_Voo05.JPG", "foto": "DJI_0323_R_08_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "31", "string": "ST-2.4.65.4", "tracker": "T-2.65", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673865.499, "y": 7729999.714, "temp_max": 53.0, "temp_min": 47.8, "delta": 5.2, "lat": -20.520786, "lng": -49.332515, "foto_url": "https://drive.google.com/file/d/1VtEkxQGFNZIBEFIpDw0T43VVCelZbhf5/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1VtEkxQGFNZIBEFIpDw0T43VVCelZbhf5&sz=w400", "foto_id": "1VtEkxQGFNZIBEFIpDw0T43VVCelZbhf5", "status": null, "data_correcao": null, "problema": null}, {"id": 93, "filename": "DJI_0978_R_07_Voo05.JPG", "foto": "DJI_0978_R_07_Voo05.jpg", "anomalia": "open diode", "modulo": "27", "string": "ST-2.4.67.10", "tracker": "T-2.67", "inversor": "INV-2.04", "skid": "SKID 2", "x": 673885.42, "y": 7730008.514, "temp_max": 62.3, "temp_min": 47.6, "delta": 14.7, "lat": -20.520705, "lng": -49.332325, "foto_url": "https://drive.google.com/file/d/1sgm6o5qqVj2P74UihavXi5InBrmvKgy_/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1sgm6o5qqVj2P74UihavXi5InBrmvKgy_&sz=w400", "foto_id": "1sgm6o5qqVj2P74UihavXi5InBrmvKgy_", "status": null, "data_correcao": null, "problema": null}, {"id": 94, "filename": "DJI_0474_R_07_Voo05.JPG", "foto": "DJI_0474_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "13", "string": "ST-2.5.71.10", "tracker": "T-2.71", "inversor": "INV-2.05", "skid": "SKID 2", "x": 673920.379, "y": 7730011.668, "temp_max": 52.8, "temp_min": 46.6, "delta": 6.2, "lat": -20.520673, "lng": -49.33199, "foto_url": "https://drive.google.com/file/d/1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx&sz=w400", "foto_id": "1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx", "status": null, "data_correcao": null, "problema": null}, {"id": 95, "filename": "DJI_0476_R_07_Voo05.JPG", "foto": "DJI_0474_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-2.5.71.11", "tracker": "T-2.71", "inversor": "INV-2.05", "skid": "SKID 2", "x": 673920.45, "y": 7730002.49, "temp_max": 62.9, "temp_min": 46.1, "delta": 16.8, "lat": -20.520756, "lng": -49.331988, "foto_url": "https://drive.google.com/file/d/1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx&sz=w400", "foto_id": "1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx", "status": null, "data_correcao": null, "problema": null}, {"id": 96, "filename": "DJI_0474_R_07_Voo05.JPG", "foto": "DJI_0474_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "14", "string": "ST-2.5.71.10", "tracker": "T-2.71", "inversor": "INV-2.05", "skid": "SKID 2", "x": 673920.341, "y": 7730010.384, "temp_max": 52.1, "temp_min": 46.4, "delta": 5.7, "lat": -20.520685, "lng": -49.33199, "foto_url": "https://drive.google.com/file/d/1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx&sz=w400", "foto_id": "1y4OmHVBXPjlkrYU1RsGLlvtIHgNHZWLx", "status": null, "data_correcao": null, "problema": null}, {"id": 97, "filename": "DJI_0318_R_07_Voo05.JPG", "foto": "DJI_0318_R_07_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "14", "string": "ST-2.6.72.2", "tracker": "T-2.72", "inversor": "INV-2.06", "skid": "SKID 2", "x": 673930.43, "y": 7729989.43, "temp_max": 51.4, "temp_min": 45.5, "delta": 5.9, "lat": -20.520873, "lng": -49.331891, "foto_url": "https://drive.google.com/file/d/1_vKoZ8OElHnC8LudTh57usfFjK3_5zeF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1_vKoZ8OElHnC8LudTh57usfFjK3_5zeF&sz=w400", "foto_id": "1_vKoZ8OElHnC8LudTh57usfFjK3_5zeF", "status": null, "data_correcao": null, "problema": null}, {"id": 98, "filename": "DJI_0987_R_06_Voo05.JPG", "foto": "DJI_0987_R_06_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "24", "string": "ST-2.6.74.9", "tracker": "T-2.74", "inversor": "INV-2.06", "skid": "SKID 2", "x": 673955.469, "y": 7729979.965, "temp_max": 56.5, "temp_min": 49.7, "delta": 6.8, "lat": -20.520956, "lng": -49.33165, "foto_url": "https://drive.google.com/file/d/1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19&sz=w400", "foto_id": "1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19", "status": null, "data_correcao": null, "problema": null}, {"id": 99, "filename": "DJI_0987_R_06_Voo05.JPG", "foto": "DJI_0987_R_06_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "25", "string": "ST-2.6.74.9", "tracker": "T-2.74", "inversor": "INV-2.06", "skid": "SKID 2", "x": 673955.439, "y": 7729978.597, "temp_max": 55.6, "temp_min": 49.7, "delta": 5.9, "lat": -20.520969, "lng": -49.33165, "foto_url": "https://drive.google.com/file/d/1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19&sz=w400", "foto_id": "1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19", "status": null, "data_correcao": null, "problema": null}, {"id": 100, "filename": "DJI_0987_R_06_Voo05.JPG", "foto": "DJI_0987_R_06_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "26", "string": "ST-2.6.74.9", "tracker": "T-2.74", "inversor": "INV-2.06", "skid": "SKID 2", "x": 673955.348, "y": 7729977.3, "temp_max": 60.3, "temp_min": 49.7, "delta": 10.6, "lat": -20.52098, "lng": -49.331651, "foto_url": "https://drive.google.com/file/d/1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19&sz=w400", "foto_id": "1DffBkc0NHJ_o0iQNiwseVWTVunYU6X19", "status": null, "data_correcao": null, "problema": null}, {"id": 101, "filename": "DJI_0883_R_06_Voo05.JPG", "foto": "DJI_0883_R_06_Voo05.jpg", "anomalia": "hot-spot", "modulo": "27", "string": "ST-2.6.75.11", "tracker": "T-2.75", "inversor": "INV-2.06", "skid": "SKID 2", "x": 673960.479, "y": 7729977.799, "temp_max": 54.3, "temp_min": 48.3, "delta": 6, "lat": -20.520975, "lng": -49.331602, "foto_url": "https://drive.google.com/file/d/1QrIoZqCx2fi6WLlKon6CuwWrIujE01YF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1QrIoZqCx2fi6WLlKon6CuwWrIujE01YF&sz=w400", "foto_id": "1QrIoZqCx2fi6WLlKon6CuwWrIujE01YF", "status": null, "data_correcao": null, "problema": null}, {"id": 102, "filename": "DJI_0891_R_06_Voo05.JPG", "foto": "DJI_0891_R_06_Voo05.jpg", "anomalia": "multi hot-spot", "modulo": "02", "string": "ST-2.6.75.11", "tracker": "T-2.75", "inversor": "INV-2.06", "skid": "SKID 2", "x": 673960.449, "y": 7730011.103, "temp_max": 80.6, "temp_min": 47.7, "delta": 32.9, "lat": -20.520675, "lng": -49.331606, "foto_url": "https://drive.google.com/file/d/1QVyog4OE_RuZISCMyUTvoISM2inybGFI/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1QVyog4OE_RuZISCMyUTvoISM2inybGFI&sz=w400", "foto_id": "1QVyog4OE_RuZISCMyUTvoISM2inybGFI", "status": null, "data_correcao": null, "problema": null}, {"id": 103, "filename": "DJI_0671_R_06_Voo04.JPG", "foto": "DJI_0844_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "23", "string": "ST-2.7.76.1", "tracker": "T-2.76", "inversor": "INV-2.07", "skid": "SKID 2", "x": 673975.47, "y": 7730029.78, "temp_max": 62.6, "temp_min": 43.9, "delta": 18.7, "lat": -20.520505, "lng": -49.331463, "foto_url": "https://drive.google.com/file/d/15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ&sz=w400", "foto_id": "15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ", "status": null, "data_correcao": null, "problema": null}, {"id": 104, "filename": "DJI_0025_R_06_Voo04.JPG", "foto": "DJI_0978_R_07_Voo05.jpg", "anomalia": "open diode", "modulo": "33", "string": "ST-2.8.81.5", "tracker": "T-2.81", "inversor": "INV-2.08", "skid": "SKID 2", "x": 674020.505, "y": 7729979.067, "temp_max": 53.8, "temp_min": 39.7, "delta": 14.1, "lat": -20.520958, "lng": -49.331027, "foto_url": "https://drive.google.com/file/d/1sgm6o5qqVj2P74UihavXi5InBrmvKgy_/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1sgm6o5qqVj2P74UihavXi5InBrmvKgy_&sz=w400", "foto_id": "1sgm6o5qqVj2P74UihavXi5InBrmvKgy_", "status": null, "data_correcao": null, "problema": null}, {"id": 105, "filename": "DJI_0844_R_05_Voo04.JPG", "foto": "DJI_0844_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-2.8.82.9", "tracker": "T-2.82", "inversor": "INV-2.08", "skid": "SKID 2", "x": 674035.479, "y": 7730019.103, "temp_max": 54.6, "temp_min": 42.9, "delta": 11.7, "lat": -20.520595, "lng": -49.330887, "foto_url": "https://drive.google.com/file/d/15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ&sz=w400", "foto_id": "15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ", "status": null, "data_correcao": null, "problema": null}, {"id": 106, "filename": "DJI_0894_R_05_Voo04.JPG", "foto": "DJI_0894_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "08", "string": "ST-2.8.82.8", "tracker": "T-2.82", "inversor": "INV-2.08", "skid": "SKID 2", "x": 674030.455, "y": 7730013.79, "temp_max": 52.5, "temp_min": 43.3, "delta": 9.2, "lat": -20.520644, "lng": -49.330935, "foto_url": "https://drive.google.com/file/d/16IAphVL3JjIkpsPabGSyGCwKOSWD3T02/view", "foto_thumb": "https://drive.google.com/thumbnail?id=16IAphVL3JjIkpsPabGSyGCwKOSWD3T02&sz=w400", "foto_id": "16IAphVL3JjIkpsPabGSyGCwKOSWD3T02", "status": null, "data_correcao": null, "problema": null}, {"id": 107, "filename": "DJI_0900_R_05_Voo04.JPG", "foto": "DJI_0900_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "11", "string": "ST-2.8.82.7", "tracker": "T-2.82", "inversor": "INV-2.08", "skid": "SKID 2", "x": 674030.371, "y": 7730032.193, "temp_max": 93.4, "temp_min": 41.9, "delta": 51.5, "lat": -20.520478, "lng": -49.330937, "foto_url": "https://drive.google.com/file/d/1t2uzU-XNbvX7pWt2D-zHX6gcscfhwzvf/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1t2uzU-XNbvX7pWt2D-zHX6gcscfhwzvf&sz=w400", "foto_id": "1t2uzU-XNbvX7pWt2D-zHX6gcscfhwzvf", "status": null, "data_correcao": null, "problema": null}, {"id": 108, "filename": "DJI_0844_R_05_Voo04.JPG", "foto": "DJI_0844_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "05", "string": "ST-2.8.82.9", "tracker": "T-2.82", "inversor": "INV-2.08", "skid": "SKID 2", "x": 674035.524, "y": 7730017.735, "temp_max": 50.3, "temp_min": 44.1, "delta": 6.2, "lat": -20.520608, "lng": -49.330886, "foto_url": "https://drive.google.com/file/d/15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ&sz=w400", "foto_id": "15U6RahhzOkt57kRqEKEgot2PzOrtDeBQ", "status": null, "data_correcao": null, "problema": null}, {"id": 109, "filename": "DJI_0726_R_05_Voo04.JPG", "foto": "DJI_0726_R_05_Voo04.jpg", "anomalia": "multi hot-spot", "modulo": "09", "string": "ST-2.8.83.11", "tracker": "T-2.83", "inversor": "INV-2.08", "skid": "SKID 2", "x": 674040.413, "y": 7730013.978, "temp_max": 53.4, "temp_min": 45.1, "delta": 8.3, "lat": -20.520641, "lng": -49.330839, "foto_url": "https://drive.google.com/file/d/1Fi9vdoNHMftKYM9Z5KI3DeAUb-PYFyOJ/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1Fi9vdoNHMftKYM9Z5KI3DeAUb-PYFyOJ&sz=w400", "foto_id": "1Fi9vdoNHMftKYM9Z5KI3DeAUb-PYFyOJ", "status": null, "data_correcao": null, "problema": null}, {"id": 110, "filename": "DJI_0066_R_05_Voo03.JPG", "foto": "DJI_0066_R_05_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "04", "string": "ST-2.9.87.12", "tracker": "T-2.87", "inversor": "INV-2.09", "skid": "SKID 2", "x": 674085.578, "y": 7730026.702, "temp_max": 66.7, "temp_min": 47.2, "delta": 19.5, "lat": -20.520522, "lng": -49.330407, "foto_url": "https://drive.google.com/file/d/1lrtHMMT4pUCJ_-IEqBlg5Hv3DFiC5sXr/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1lrtHMMT4pUCJ_-IEqBlg5Hv3DFiC5sXr&sz=w400", "foto_id": "1lrtHMMT4pUCJ_-IEqBlg5Hv3DFiC5sXr", "status": null, "data_correcao": null, "problema": null}, {"id": 111, "filename": "DJI_0182_R_05_Voo03.JPG", "foto": "DJI_0182_R_05_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "03", "string": "ST-2.9.87.11", "tracker": "T-2.87", "inversor": "INV-2.09", "skid": "SKID 2", "x": 674080.531, "y": 7730027.924, "temp_max": 56.8, "temp_min": 46.3, "delta": 10.5, "lat": -20.520512, "lng": -49.330456, "foto_url": "https://drive.google.com/file/d/1qVxzRIqgVBONBpJ332cgjnsEtdRI866m/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1qVxzRIqgVBONBpJ332cgjnsEtdRI866m&sz=w400", "foto_id": "1qVxzRIqgVBONBpJ332cgjnsEtdRI866m", "status": null, "data_correcao": null, "problema": null}, {"id": 112, "filename": "DJI_0393_R_04_Voo03.JPG", "foto": "DJI_0393_R_04_Voo03.jpg", "anomalia": "multi hot-spot", "modulo": "07", "string": "ST-2.11.92.1", "tracker": "T-2.92", "inversor": "INV-2.11", "skid": "SKID 2", "x": 674130.554, "y": 7730029.983, "temp_max": 80.9, "temp_min": 40.5, "delta": 40.4, "lat": -20.520488, "lng": -49.329976, "foto_url": "https://drive.google.com/file/d/1rKTv9O_zLxvlYy1g6G74H59SIj61N914/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1rKTv9O_zLxvlYy1g6G74H59SIj61N914&sz=w400", "foto_id": "1rKTv9O_zLxvlYy1g6G74H59SIj61N914", "status": null, "data_correcao": null, "problema": null}, {"id": 113, "filename": "DJI_0849_R_02_Voo02.JPG", "foto": "DJI_0849_R_02_Voo02.jpg", "anomalia": "multi hot-spot", "modulo": "30", "string": "ST-2.13.102.4", "tracker": "T-2.102", "inversor": "INV-2.13", "skid": "SKID 2", "x": 674235.444, "y": 7730013.261, "temp_max": 41.0, "temp_min": 32.4, "delta": 8.6, "lat": -20.52063, "lng": -49.328969, "foto_url": "https://drive.google.com/file/d/1_Hm3q-_VTJ2CoHuTcXtx-1rGtoKqNJXl/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1_Hm3q-_VTJ2CoHuTcXtx-1rGtoKqNJXl&sz=w400", "foto_id": "1_Hm3q-_VTJ2CoHuTcXtx-1rGtoKqNJXl", "status": null, "data_correcao": null, "problema": null}, {"id": 114, "filename": "DJI_0851_R_02_Voo02.JPG", "foto": "DJI_0851_R_02_Voo02.jpg", "anomalia": "hot-spot", "modulo": "33", "string": "ST-2.13.102.4", "tracker": "T-2.102", "inversor": "INV-2.13", "skid": "SKID 2", "x": 674235.336, "y": 7730009.34, "temp_max": 35.9, "temp_min": 32.2, "delta": 3.7, "lat": -20.520665, "lng": -49.32897, "foto_url": "https://drive.google.com/file/d/1CSDH9O9jH7zFKR59AR6A93cCih-_NUVo/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1CSDH9O9jH7zFKR59AR6A93cCih-_NUVo&sz=w400", "foto_id": "1CSDH9O9jH7zFKR59AR6A93cCih-_NUVo", "status": null, "data_correcao": null, "problema": null}, {"id": 115, "filename": "DJI_0893_R_02_Voo02.JPG", "foto": "DJI_0893_R_02_Voo02.jpg", "anomalia": "open diode", "modulo": "05", "string": "ST-2.13.102.2", "tracker": "T-2.102", "inversor": "INV-2.13", "skid": "SKID 2", "x": 674230.368, "y": 7730068.788, "temp_max": 40.8, "temp_min": 33.5, "delta": 7.3, "lat": -20.520129, "lng": -49.329023, "foto_url": "https://drive.google.com/file/d/1o6L4JUYaxGC_isVmv9MhV3zFzS5-OrRF/view", "foto_thumb": "https://drive.google.com/thumbnail?id=1o6L4JUYaxGC_isVmv9MhV3zFzS5-OrRF&sz=w400", "foto_id": "1o6L4JUYaxGC_isVmv9MhV3zFzS5-OrRF", "status": null, "data_correcao": null, "problema": null}]}]};
+
+async function init() {
+  // 1. Carrega base inicial (json externo ou embedded)
+  try {
+    const res = await fetch('usinas.json?_=' + Date.now());
+    if (res.ok) {
+      DB = await res.json();
+    } else {
+      throw new Error('http ' + res.status);
+    }
+  } catch (e) {
+    console.log('Usando dados embutidos (fetch falhou):', e.message);
+    DB = JSON.parse(JSON.stringify(EMBEDDED_DB));
+  }
+
+  // 2. Para cada usina com SHEETS_CONFIG, tenta atualizar do Sheets
+  await sincronizarComSheets();
+
+  // 3. Inicia auto-refresh
+  if (AUTO_REFRESH_MS > 0) {
+    setInterval(sincronizarComSheets, AUTO_REFRESH_MS);
+  }
+  if (!DB.usinas || !DB.usinas.length) {
+    alert('Nenhuma usina cadastrada. Use "+ Adicionar Usina".');
+    return;
+  }
+  popularUsinaSelect();
+  initMap();
+  initFiltros();
+  initModal();
+  selecionarUsina(DB.usinas[0].id);
+}
+
+
+// ============ SINCRONIZACAO COM GOOGLE SHEETS ============
+function parseCSV(text) {
+  // Parser simples de CSV com suporte a aspas e virgulas dentro de campos
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (field !== '' || row.length > 0) {
+          row.push(field);
+          rows.push(row);
+          row = []; field = '';
+        }
+        if (c === '\r' && text[i+1] === '\n') i++;
+      } else field += c;
+    }
+  }
+  if (field !== '' || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function csvToObjects(csv) {
+  const rows = parseCSV(csv);
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1).filter(r => r.length > 0 && r.some(c => c)).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = row[i] !== undefined ? row[i] : null);
+    return obj;
+  });
+}
+
+function num(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+
+function setSyncStatus(state, msg) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const colors = { sync: '#fbbf24', ok: '#10b981', err: '#ef4444', off: '#94a3b8' };
+  el.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:' + colors[state] + ';display:inline-block' + (state==='sync'?';animation:pulse 1.2s infinite':'') + '"></span><span>' + msg + '</span>';
+}
+
+async function sincronizarComSheets() {
+  // Detecta file:// que nao consegue fazer fetch externo
+  if (location.protocol === 'file:') {
+    setSyncStatus('off', 'Auto-sync desativado (file://)');
+    return;
+  }
+
+  // Verifica se ha pelo menos uma usina com config
+  const temConfig = DB.usinas.some(u => SHEETS_CONFIG[u.id]);
+  if (!temConfig) {
+    setSyncStatus('off', 'Sem auto-sync configurado');
+    return;
+  }
+
+  let totalSynced = 0;
+  let qualquerErro = null;
+  setSyncStatus('sync', 'Sincronizando...');
+
+  for (const usina of DB.usinas) {
+    const cfg = SHEETS_CONFIG[usina.id];
+    if (!cfg) continue;
+
+    try {
+      const baseUrl = 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId + '/gviz/tq?tqx=out:csv&gid=';
+      const ts = Date.now();
+      const [csvAnom, csvCampo] = await Promise.all([
+        fetch(baseUrl + cfg.gidAnomalias + '&_=' + ts).then(r => { if(!r.ok) throw new Error('http '+r.status+' anomalias'); return r.text(); }),
+        fetch(baseUrl + cfg.gidCampo + '&_=' + ts).then(r => { if(!r.ok) throw new Error('http '+r.status+' campo'); return r.text(); })
+      ]);
+
+      // Parse anomalias
+      const anomRows = csvToObjects(csvAnom);
+      const novasAnomalias = anomRows.filter(r => r['ID']).map(r => ({
+        id: parseInt(r['ID']),
+        filename: r['FileName'] || null,
+        foto: r['Foto'] || null,
+        anomalia: r['Anomalies'] || null,
+        modulo: r['Module'] || null,
+        string: r['String'] || null,
+        tracker: r['Tracker'] || null,
+        inversor: r['Inverter'] || null,
+        skid: r['Skid'] || null,
+        x: num(r['X']),
+        y: num(r['Y']),
+        temp_max: num(r['TempMax']),
+        temp_min: num(r['TempMin']),
+        delta: num(r['Delta']),
+        lat: num(r['Latitude']),
+        lng: num(r['Longitude']),
+        status: null, data_correcao: null, problema: null
+      }));
+
+      // Preserva foto_url/foto_thumb dos dados antigos
+      const oldById = {};
+      usina.anomalias.forEach(a => oldById[a.id] = a);
+      novasAnomalias.forEach(a => {
+        const old = oldById[a.id];
+        if (old) {
+          if (old.foto_url) a.foto_url = old.foto_url;
+          if (old.foto_thumb) a.foto_thumb = old.foto_thumb;
+          if (old.foto_id) a.foto_id = old.foto_id;
+        }
+      });
+
+      // Merge dados de Equipe Campo
+      const campoRows = csvToObjects(csvCampo);
+      const byId = {};
+      novasAnomalias.forEach(a => byId[a.id] = a);
+      campoRows.forEach(r => {
+        const id = parseInt(r['ID']);
+        const a = byId[id];
+        if (!a) return;
+        for (const k in r) {
+          const kl = k.trim().toLowerCase();
+          if (kl === 'status') a.status = r[k] || null;
+          else if (kl.startsWith('data')) a.data_correcao = r[k] || null;
+          else if (kl.startsWith('problema')) a.problema = r[k] || null;
+        }
+      });
+
+      usina.anomalias = novasAnomalias;
+      totalSynced += novasAnomalias.length;
+    } catch (e) {
+      console.error('Erro sincronizando ' + usina.id + ':', e);
+      qualquerErro = e;
+    }
+  }
+
+  if (qualquerErro) {
+    setSyncStatus('err', 'Erro: ' + qualquerErro.message);
+  } else if (totalSynced > 0) {
+    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus('ok', 'Atualizado ' + hora + ' (' + totalSynced + ')');
+  } else {
+    setSyncStatus('off', 'Sem auto-sync configurado');
+  }
+
+  // Re-render
+  if (usinaAtual) {
+    const id = usinaAtual.id;
+    selecionarUsina(id);
+  } else if (DB.usinas.length) {
+    popularUsinaSelect();
+    selecionarUsina(DB.usinas[0].id);
+  }
+}
+
+// Botao de sync manual
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btn-sync');
+  if (btn) btn.addEventListener('click', sincronizarComSheets);
+});
+
+
+function popularUsinaSelect() {
+  const sel = document.getElementById('usina-select');
+  sel.innerHTML = '';
+  DB.usinas.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id; opt.textContent = u.nome;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', e => selecionarUsina(e.target.value));
+}
+
+function selecionarUsina(id) {
+  usinaAtual = DB.usinas.find(u => u.id === id);
+  if (!usinaAtual) return;
+  document.getElementById('usina-select').value = id;
+  document.getElementById('hdr-sub').textContent =
+    `${usinaAtual.nome} · ${usinaAtual.anomalias.length} anomalias` +
+    (usinaAtual.data_inspecao ? ` · Inspeção em ${usinaAtual.data_inspecao}` : '');
+  document.getElementById('footer-info').textContent =
+    `${DB.usinas.length} usina(s) carregadas`;
+  filtered = [...usinaAtual.anomalias];
+  popularFiltros();
+  renderAll();
+}
+
+function popularFiltros() {
+  ['anomalia','inversor','skid','tracker'].forEach(key => {
+    const sel = document.getElementById('f-'+key);
+    sel.innerHTML = `<option value="">Todos</option>`;
+    const vals = [...new Set(usinaAtual.anomalias.map(d=>d[key]).filter(Boolean))].sort();
+    vals.forEach(v => {
+      const o = document.createElement('option'); o.value=v; o.textContent=v;
+      sel.appendChild(o);
+    });
+  });
+  ['f-criticidade','f-status','f-delta','f-data-de','f-data-ate','f-search'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+}
+
+function initFiltros() {
+  const FILTER_IDS = ['f-anomalia','f-criticidade','f-status','f-inversor','f-skid','f-tracker','f-delta','f-data-de','f-data-ate','f-search'];
+  FILTER_IDS.forEach(id =>
+    document.getElementById(id).addEventListener('input', aplicarFiltros));
+  document.getElementById('reset').addEventListener('click', () => {
+    FILTER_IDS.forEach(id => document.getElementById(id).value = '');
+    aplicarFiltros();
+  });
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const k = th.dataset.sort;
+      if (sortKey === k) sortAsc = !sortAsc;
+      else { sortKey = k; sortAsc = true; }
+      document.querySelectorAll('th').forEach(t => t.classList.remove('sorted','asc'));
+      th.classList.add('sorted');
+      if (sortAsc) th.classList.add('asc');
+      renderTable();
+    });
+  });
+}
+
+function aplicarFiltros() {
+  const a = document.getElementById('f-anomalia').value;
+  const crit = document.getElementById('f-criticidade').value;
+  const stt = document.getElementById('f-status').value;
+  const i = document.getElementById('f-inversor').value;
+  const s = document.getElementById('f-skid').value;
+  const t = document.getElementById('f-tracker').value;
+  const dt = parseFloat(document.getElementById('f-delta').value) || 0;
+  const dDe = document.getElementById('f-data-de').value;
+  const dAte = document.getElementById('f-data-ate').value;
+  const q = document.getElementById('f-search').value.toLowerCase().trim();
+
+  filtered = usinaAtual.anomalias.filter(d => {
+    if (a && d.anomalia !== a) return false;
+    if (i && d.inversor !== i) return false;
+    if (s && d.skid !== s) return false;
+    if (t && d.tracker !== t) return false;
+    if ((d.delta||0) < dt) return false;
+
+    // Criticidade por DT
+    if (crit) {
+      const v = d.delta || 0;
+      if (crit === 'critico' && v < 20) return false;
+      if (crit === 'moderado' && (v < 10 || v >= 20)) return false;
+      if (crit === 'baixo' && v >= 10) return false;
+    }
+
+    // Status (usa normalizeStatus se existir)
+    if (stt) {
+      const n = (typeof normalizeStatus === 'function') ? normalizeStatus(d.status) : (d.status||'').toLowerCase();
+      if (stt === 'vazio' && n !== '_vazio') return false;
+      if (stt === 'resolvido' && !n.includes('resolv')) return false;
+      if (stt === 'andamento' && !n.includes('andament')) return false;
+      if (stt === 'pendente' && !n.includes('pendent')) return false;
+      if (stt === 'naoprocede' && !(n.includes('nao procede') || n.includes('improc'))) return false;
+    }
+
+    // Data da correcao (range)
+    if (dDe || dAte) {
+      const dc = d.data_correcao;
+      if (!dc) return false;
+      // tenta normalizar pra YYYY-MM-DD
+      const dcStr = String(dc).slice(0, 10);
+      if (dDe && dcStr < dDe) return false;
+      if (dAte && dcStr > dAte) return false;
+    }
+
+    if (q) {
+      const txt = Object.values(d).map(v=>String(v||'').toLowerCase()).join(' ');
+      if (!txt.includes(q)) return false;
+    }
+    return true;
+  });
+  renderAll();
+}
+
+function initMap() {
+  map = L.map('map', { preferCanvas: true, maxZoom: 22 }).setView([-20.520, -49.330], 17);
+  L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    subdomains: ['0','1','2','3'],
+    attribution: '© Google', maxZoom: 22
+  }).addTo(map);
+  markersCluster = L.markerClusterGroup({
+    maxClusterRadius: 30,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    disableClusteringAtZoom: 19
+  });
+  map.addLayer(markersCluster);
+}
+
+function popupHtml(d) {
+  const cls = ANOMALIA_CLASS[d.anomalia] || '';
+  return `
+    <div class="popup-title"><span class="badge ${cls}">${d.anomalia||''}</span> &nbsp;ID ${d.id}</div>
+    <div class="popup-row"><span class="k">Módulo</span><span class="v">${d.modulo||'—'}</span></div>
+    <div class="popup-row"><span class="k">String</span><span class="v mono">${d.string||'—'}</span></div>
+    <div class="popup-row"><span class="k">Tracker</span><span class="v">${d.tracker||'—'}</span></div>
+    <div class="popup-row"><span class="k">Inversor</span><span class="v">${d.inversor||'—'}</span></div>
+    <div class="popup-row"><span class="k">Skid</span><span class="v">${d.skid||'—'}</span></div>
+    <div class="popup-row"><span class="k">T.Max</span><span class="v">${d.temp_max?d.temp_max.toFixed(1)+'°C':'—'}</span></div>
+    <div class="popup-row"><span class="k">ΔT</span><span class="v" style="color:${d.delta>=20?'#ef4444':d.delta>=10?'#f59e0b':'#10b981'}">${d.delta?d.delta.toFixed(1)+'°C':'—'}</span></div>
+    <div class="popup-row"><span class="k">Lat/Lng</span><span class="v mono">${d.lat?d.lat.toFixed(6):'—'}, ${d.lng?d.lng.toFixed(6):'—'}</span></div>
+    ${d.foto_url ? '<div style="margin-top:10px;text-align:center"><a href="'+d.foto_url+'" target="_blank"><img src="'+d.foto_thumb+'" style="max-width:100%;border-radius:6px;border:1px solid #334155" loading="lazy"><br><span style="color:#06b6d4;font-size:11px">Abrir foto no Drive ↗</span></a></div>' : ''}
+  `;
+}
+
+function renderMap() {
+  markersCluster.clearLayers();
+  markerById = {};
+  const bounds = [];
+  filtered.forEach(d => {
+    if (!d.lat || !d.lng) return;
+    bounds.push([d.lat, d.lng]);
+    const color = ANOMALIA_COLOR[d.anomalia] || '#94a3b8';
+    const radius = Math.max(5, Math.min(14, (d.delta||0)*0.4 + 5));
+    const marker = L.circleMarker([d.lat, d.lng], {
+      radius, color: '#fff', weight: 1.5, fillColor: color, fillOpacity: 0.9
+    });
+    marker.bindPopup(popupHtml(d), { maxWidth: 320 });
+    markersCluster.addLayer(marker);
+    markerById[d.id] = marker;
+  });
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
+  document.getElementById('map-count').textContent = `(${filtered.length} pontos)`;
+}
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#334155';
+
+function renderCharts() {
+  const tipos = {};
+  filtered.forEach(d => tipos[d.anomalia] = (tipos[d.anomalia]||0)+1);
+  if (chartTipos) chartTipos.destroy();
+  chartTipos = new Chart(document.getElementById('chartTipos'), {
+    type: 'doughnut',
+    data: { labels: Object.keys(tipos), datasets: [{ data: Object.values(tipos),
+            backgroundColor: Object.keys(tipos).map(k => ANOMALIA_COLOR[k] || '#94a3b8') }] },
+    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }}}}, maintainAspectRatio: false }
+  });
+
+  const skids = {};
+  filtered.forEach(d => skids[d.skid] = (skids[d.skid]||0)+1);
+  if (chartSkids) chartSkids.destroy();
+  chartSkids = new Chart(document.getElementById('chartSkids'), {
+    type: 'bar',
+    data: { labels: Object.keys(skids), datasets: [{ data: Object.values(skids), backgroundColor: '#06b6d4' }] },
+    options: { plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true }}, maintainAspectRatio: false }
+  });
+
+  const inv = {};
+  filtered.forEach(d => inv[d.inversor] = (inv[d.inversor]||0)+1);
+  const sortedInv = Object.entries(inv).sort((a,b)=>b[1]-a[1]);
+  if (chartInv) chartInv.destroy();
+  chartInv = new Chart(document.getElementById('chartInv'), {
+    type: 'bar',
+    data: { labels: sortedInv.map(x=>x[0]), datasets: [{ data: sortedInv.map(x=>x[1]), backgroundColor: '#06b6d4' }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false }}, scales: { x: { beginAtZero: true }}, maintainAspectRatio: false }
+  });
+
+  const buckets = {'0-5':0,'5-10':0,'10-15':0,'15-20':0,'20-30':0,'30+':0};
+  filtered.forEach(d => {
+    const dt = d.delta || 0;
+    if (dt < 5) buckets['0-5']++;
+    else if (dt < 10) buckets['5-10']++;
+    else if (dt < 15) buckets['10-15']++;
+    else if (dt < 20) buckets['15-20']++;
+    else if (dt < 30) buckets['20-30']++;
+    else buckets['30+']++;
+  });
+  if (chartDelta) chartDelta.destroy();
+  chartDelta = new Chart(document.getElementById('chartDelta'), {
+    type: 'bar',
+    data: { labels: Object.keys(buckets), datasets: [{ label: 'Quantidade', data: Object.values(buckets),
+            backgroundColor: ['#10b981','#84cc16','#facc15','#f59e0b','#ef4444','#dc2626'] }] },
+    options: { plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true }, x: { title: { display: true, text: 'Faixa de ΔT (°C)' }}}, maintainAspectRatio: false }
+  });
+}
+
+function renderStats() {
+  const total = filtered.length;
+  const critical = filtered.filter(d => (d.delta||0) >= 20).length;
+  const moderate = filtered.filter(d => (d.delta||0) >= 10 && (d.delta||0) < 20).length;
+  const tmax = filtered.length ? Math.max(...filtered.map(d=>d.temp_max||0)) : 0;
+  const dmax = filtered.length ? Math.max(...filtered.map(d=>d.delta||0)) : 0;
+  const invs = new Set(filtered.map(d => d.inversor).filter(Boolean)).size;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="label">Total</div><div class="value">${total}</div><div class="sub">anomalias</div></div>
+    <div class="stat critical"><div class="label">Críticas (ΔT≥20)</div><div class="value">${critical}</div><div class="sub">${total ? (critical/total*100).toFixed(0) : 0}%</div></div>
+    <div class="stat warn"><div class="label">Moderadas (10–20)</div><div class="value">${moderate}</div></div>
+    <div class="stat ok"><div class="label">T.Max</div><div class="value">${tmax.toFixed(1)}°C</div></div>
+    <div class="stat warn"><div class="label">ΔT máximo</div><div class="value">${dmax.toFixed(1)}°C</div></div>
+    <div class="stat"><div class="label">Inversores afetados</div><div class="value">${invs}</div></div>
+  `;
+}
+
+function renderTable() {
+  const sorted = [...filtered].sort((a,b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    if (va == null) return 1; if (vb == null) return -1;
+    const cmp = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb));
+    return sortAsc ? cmp : -cmp;
+  });
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = sorted.map(d => {
+    const cls = ANOMALIA_CLASS[d.anomalia] || '';
+    const barWidth = Math.min(80, (d.delta||0)*2);
+    return `<tr data-id="${d.id}">
+      <td><b>${d.id}</b></td>
+      <td><span class="badge ${cls}">${d.anomalia||''}</span></td>
+      <td>${d.modulo||''}</td>
+      <td class="mono">${d.string||''}</td>
+      <td>${d.tracker||''}</td>
+      <td>${d.inversor||''}</td>
+      <td>${d.skid||''}</td>
+      <td>${d.temp_max!=null?d.temp_max.toFixed(1):''}</td>
+      <td>${d.delta!=null?d.delta.toFixed(1):''}<span class="temp-bar" style="width:${barWidth}px"></span></td>
+      <td class="mono" style="font-size:10px">${d.lat!=null?d.lat.toFixed(5):''}, ${d.lng!=null?d.lng.toFixed(5):''}</td>
+      <td>${d.foto_url ? '<a href="'+d.foto_url+'" target="_blank" style="color:#06b6d4;text-decoration:none" onclick="event.stopPropagation()" title="Abrir no Drive">📷 ver foto</a>' : ''}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tbCount').textContent = `(${sorted.length} de ${usinaAtual.anomalias.length})`;
+  document.getElementById('contador').textContent = `Mostrando ${sorted.length} de ${usinaAtual.anomalias.length}`;
+
+  tbody.querySelectorAll('tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = parseInt(tr.dataset.id);
+      const m = markerById[id];
+      if (m) {
+        markersCluster.zoomToShowLayer(m, () => {
+          m.openPopup();
+          map.setView(m.getLatLng(), 21);
+        });
+        document.querySelectorAll('tbody tr').forEach(t => t.classList.remove('selected'));
+        tr.classList.add('selected');
+        document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  });
+}
+
+function renderAll() { renderStats(); renderMap(); renderCharts(); renderTable(); }
+
+function initModal() {
+  const modal = document.getElementById('modal');
+  document.getElementById('btn-add').addEventListener('click', () => {
+    document.getElementById('m-nome').value = '';
+    document.getElementById('m-preview').innerHTML = '';
+    document.getElementById('m-save').disabled = true;
+    novaUsinaPendente = null;
+    modal.classList.add('show');
+  });
+  document.getElementById('m-cancel').addEventListener('click', () => modal.classList.remove('show'));
+  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
+
+  const drop = document.getElementById('drop');
+  const input = document.getElementById('file-input');
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('over');
+    if (e.dataTransfer.files[0]) processarArquivo(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e => { if (e.target.files[0]) processarArquivo(e.target.files[0]); });
+
+  document.getElementById('m-save').addEventListener('click', () => {
+    if (!novaUsinaPendente) return;
+    const nome = document.getElementById('m-nome').value.trim() || 'UFV Sem Nome';
+    const id = nome.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    const novaDB = JSON.parse(JSON.stringify(DB));
+    novaDB.usinas.push({ id, nome,
+      data_inspecao: new Date().toISOString().slice(0,10),
+      anomalias: novaUsinaPendente
+    });
+    const blob = new Blob([JSON.stringify(novaDB, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'usinas.json';
+    a.click();
+    alert(`Pronto! Substitua o "usinas.json" do seu repositório GitHub por este arquivo baixado, faça commit, e a usina "${nome}" aparecerá no site.`);
+    document.getElementById('modal').classList.remove('show');
+  });
+}
+
+function processarArquivo(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      // Aba 1: anomalias
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+      const anomalias = rows.filter(r => r['ID'] != null).map(r => ({
+        id: Number(r['ID']),
+        filename: r['FileName'], foto: r['Foto'], anomalia: r['Anomalies'],
+        modulo: r['Module'], string: r['String'], tracker: r['Tracker'],
+        inversor: r['Inverter'], skid: r['Skid'],
+        x: r['X'], y: r['Y'],
+        temp_max: r['TempMax'], temp_min: r['TempMin'], delta: r['Delta'],
+        lat: r['Latitude'], lng: r['Longitude'],
+        status: null, data_correcao: null, problema: null
+      }));
+
+      // Aba 2: Equipe Campo (busca por nome contendo "campo" ou "equipe")
+      let campoSheet = null;
+      for (const sn of wb.SheetNames) {
+        if (/equipe|campo/i.test(sn)) { campoSheet = wb.Sheets[sn]; break; }
+      }
+      if (campoSheet) {
+        const campoRows = XLSX.utils.sheet_to_json(campoSheet, { defval: null });
+        const byId = {};
+        anomalias.forEach(a => byId[a.id] = a);
+        let merged = 0;
+        campoRows.forEach(r => {
+          const id = Number(r['ID']);
+          const a = byId[id];
+          if (!a) return;
+          // Procura colunas com nome flexivel (com/sem espaco extra)
+          for (const k in r) {
+            const kl = k.trim().toLowerCase();
+            if (kl === 'status') a.status = r[k];
+            else if (kl.startsWith('data')) {
+              if (r[k] instanceof Date) a.data_correcao = r[k].toISOString().slice(0,10);
+              else if (typeof r[k] === 'number') {
+                // Excel date serial
+                const d = new Date((r[k] - 25569) * 86400 * 1000);
+                a.data_correcao = d.toISOString().slice(0,10);
+              } else a.data_correcao = r[k];
+            }
+            else if (kl.startsWith('problema')) a.problema = r[k];
+          }
+          if (a.status || a.data_correcao || a.problema) merged++;
+        });
+        console.log('Equipe Campo: ' + merged + ' anomalias com dados de campo');
+      }
+
+      // Preserva foto_url/foto_thumb se ja existem (vindo do Drive)
+      if (usinaAtual && novaUsinaPendenteSobreescrever) {
+        const oldById = {};
+        usinaAtual.anomalias.forEach(a => oldById[a.id] = a);
+        anomalias.forEach(a => {
+          const old = oldById[a.id];
+          if (old) {
+            if (old.foto_url) a.foto_url = old.foto_url;
+            if (old.foto_thumb) a.foto_thumb = old.foto_thumb;
+            if (old.foto_id) a.foto_id = old.foto_id;
+          }
+        });
+      }
+
+      novaUsinaPendente = anomalias;
+      const tipos = {};
+      anomalias.forEach(a => tipos[a.anomalia] = (tipos[a.anomalia]||0)+1);
+      document.getElementById('m-preview').innerHTML = `
+        <div class="preview">
+          <b>${anomalias.length} anomalias detectadas</b><br>
+          ${Object.entries(tipos).map(([k,v])=>`${k}: ${v}`).join(' · ')}
+        </div>`;
+      document.getElementById('m-save').disabled = false;
+    } catch (err) {
+      document.getElementById('m-preview').innerHTML =
+        `<div class="preview" style="color:#ef4444">Erro: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+
+// ============ TABS ============
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'performance') renderPerformance();
+    if (tab.dataset.tab === 'campo') renderCampo();
+    if (tab.dataset.tab === 'geral' && map) setTimeout(() => map.invalidateSize(), 100);
+  });
+});
+
+// ============ PERFORMANCE CALCULATION ============
+// ============ MODELO DE PERDA TERMOGRAFICA ============
+// Calibrado pelo gradiente termico DT (delta T), conforme:
+//   IEC TS 62446-3:2017 - Outdoor infrared thermography of PV modules
+//   IEA PVPS Task 13 - Review on Infrared and Electroluminescence Imaging
+//
+// A severidade nao depende SO do tipo de anomalia, mas tambem do DT medido.
+// Classificacao por DT:
+//   - Categoria 1 (Aviso):    DT <  10 C  -> impacto baixo, monitorar
+//   - Categoria 2 (Anomalia): DT 10-20 C -> impacto moderado, manutencao
+//   - Categoria 3 (Critico):  DT >  20 C -> impacto severo, intervencao urgente
+
+function lossOfModule(anomalia, deltaT) {
+  const dt = deltaT || 0;
+  switch (anomalia) {
+    case 'hot-spot':
+      // celula unica aquecida; impacto correlaciona com DT
+      if (dt < 10) return 0.8;       // categoria 1
+      if (dt < 20) return 2.5;        // categoria 2
+      return 5.0;                     // categoria 3 (provavel crack/PID)
+    case 'multi hot-spot':
+      // varias celulas; DT alto sugere bypass parcial
+      if (dt < 10) return 2.5;
+      if (dt < 20) return 6.0;
+      if (dt < 30) return 12.0;
+      return 20.0;                    // pode estar acionando diodo bypass
+    case 'shadow':
+      // sombreamento parcial - depende da persistencia
+      if (dt < 5) return 2.0;
+      if (dt < 10) return 5.0;
+      return 10.0;
+    case 'open diode':
+      // diodo bypass acionado - 1/3 do modulo isolado
+      return 33.0;
+    case 'dirty module':
+      // sujidade - quase nao gera DT alto
+      if (dt < 5) return 1.5;
+      return 4.0;
+    default:
+      return 2.0;
+  }
+}
+
+// Bonus de mismatch para multi hot-spots concentrados na mesma string
+const MULTI_HOTSPOT_MISMATCH_BONUS = 1.5;
+
+// Perdas sistemicas BASE (sempre presentes em qualquer UFV - nao relacionadas a anomalias)
+// Baseado em PVsyst loss diagram tipico para usinas brasileiras de medio porte
+const PERDAS_SISTEMICAS = {
+  derating_temp: 4.0,      // perda termica do silicio em climas quentes
+  soiling_geral: 2.0,      // sujidade media (nao por modulo, mas geral)
+  cabeamento_dc: 1.0,      // perdas ohmicas DC (cabos)
+  cabeamento_ac: 0.8,      // perdas AC ate o ponto de medicao
+  eficiencia_inv: 2.0,     // inversor (~98% eficiente em media)
+  mismatch_base: 1.0,      // mismatch fabricacao (modulos nao identicos)
+  reflexao: 1.5,           // perda angular/IAM
+  disponibilidade: 0.5     // tempo de inversor parado para manutencao
+};
+function perdaSistemicaTotal() {
+  return Object.values(PERDAS_SISTEMICAS).reduce((s,v)=>s+v, 0);
+}
+
+// STRING (modulos em serie): a corrente eh limitada pelo modulo mais fraco
+// Perda da string = pior modulo + soma dos outros * fator_mismatch_serie
+// Multi hot-spot tem efeito adicional pois eh ja um problema de mismatch interno
+function stringLoss(anomalias) {
+  if (!anomalias.length) return 0;
+  const losses = anomalias.map(a => lossOfModule(a.anomalia, a.delta)).sort((a,b)=>b-a);
+  const worst = losses[0];
+  const others = losses.slice(1).reduce((s,v)=>s+v, 0);
+
+  // Mismatch serie: corrente limitada faz o impacto se propagar
+  let total = worst + others * 0.4;
+
+  // Bonus de mismatch quando ha multi hot-spots concentrados na string
+  const multiCount = anomalias.filter(a => a.anomalia === 'multi hot-spot').length;
+  if (multiCount >= 2) {
+    total *= MULTI_HOTSPOT_MISMATCH_BONUS;
+  }
+
+  return Math.min(60, total);
+}
+
+// INVERSOR (strings em paralelo num MPPT): perda = perda_media + perda_mismatch_MPPT
+// Quando strings tem perdas diferentes, o MPPT nao consegue achar o ponto otimo
+// para todas - isso gera perda extra de mismatch no inversor
+function inverterMismatchPenalty(stringLosses) {
+  if (stringLosses.length < 2) return 0;
+  const avg = stringLosses.reduce((s,v)=>s+v, 0) / stringLosses.length;
+  const variance = stringLosses.reduce((s,v)=>s+Math.pow(v-avg,2), 0) / stringLosses.length;
+  const stdDev = Math.sqrt(variance);
+  // stdDev alta = strings muito desbalanceadas = MPPT trabalha em ponto sub-otimo
+  // Penalidade tipica de mismatch MPPT: 1-3% quando strings desbalanceadas
+  return Math.min(4, stdDev * 0.35);
+}
+
+// Calcula perda do inversor incluindo mismatch
+function inverterLoss(strings, totalStringsAssumed) {
+  if (!strings.length) return { total: 0, base: 0, mismatch: 0 };
+  const losses = strings.map(s => s.loss);
+  const sum = losses.reduce((s,v)=>s+v, 0);
+  const denom = Math.max(strings.length, totalStringsAssumed);
+  const base = sum / denom;
+  const mismatch = inverterMismatchPenalty(losses);
+  // mismatch eh proporcional a fracao de strings afetadas (se sao poucas, MPPT lida melhor)
+  const mismatchEffective = mismatch * (strings.length / denom);
+  return { total: base + mismatchEffective, base, mismatch: mismatchEffective };
+}
+
+function aggregateLoss(stringLosses, totalAssumed) {
+  const sum = stringLosses.reduce((s,v)=>s+v, 0);
+  const denom = Math.max(stringLosses.length, totalAssumed);
+  return sum / denom;
+}
+
+function classifyImpact(loss) {
+  if (loss >= 5) return 'high';
+  if (loss >= 2) return 'med';
+  return 'low';
+}
+
+function renderPerformance() {
+  if (!usinaAtual) return;
+  const all = usinaAtual.anomalias;
+
+  // Agrupa por string
+  const byString = {};
+  all.forEach(a => {
+    const k = (a.string || '?') + '||' + (a.inversor || '?') + '||' + (a.skid || '?');
+    (byString[k] = byString[k] || []).push(a);
+  });
+
+  const stringStats = Object.entries(byString).map(([k, items]) => {
+    const [str, inv, skid] = k.split('||');
+    return {
+      string: str, inversor: inv, skid: skid,
+      count: items.length,
+      loss: stringLoss(items),
+      anomalias: items
+    };
+  });
+
+  // Por Inversor
+  const byInv = {};
+  stringStats.forEach(s => {
+    (byInv[s.inversor] = byInv[s.inversor] || { skid: s.skid, strings: [] }).strings.push(s);
+  });
+  const invStats = Object.entries(byInv).map(([inv, x]) => {
+    const inv_calc = inverterLoss(x.strings, 24);  // assume 24 strings/inv
+    return {
+      inversor: inv, skid: x.skid,
+      count: x.strings.reduce((s,v)=>s+v.count, 0),
+      strings_count: x.strings.length,
+      loss: inv_calc.total,
+      loss_base: inv_calc.base,
+      loss_mismatch: inv_calc.mismatch
+    };
+  });
+
+  // Por Skid
+  const bySkid = {};
+  invStats.forEach(i => {
+    (bySkid[i.skid] = bySkid[i.skid] || []).push(i);
+  });
+  const skidStats = Object.entries(bySkid).map(([skid, invs]) => ({
+    skid,
+    invs_count: invs.length,
+    anomalias_count: invs.reduce((s,v)=>s+v.count, 0),
+    loss: aggregateLoss(invs.map(i=>i.loss), Math.max(invs.length, invs.length))
+  }));
+
+  // Saude geral da usina
+  const perdaTermografica = aggregateLoss(skidStats.map(s=>s.loss), skidStats.length);
+  const perdaSistemica = perdaSistemicaTotal();
+  const perdaTotal = perdaTermografica + perdaSistemica;
+  const prEsperado = Math.max(0, 100 - perdaTotal);
+
+  // O "score de saude" reflete SOMENTE a perda termografica (corrigivel)
+  // O PR esperado mostra a performance ratio total esperada
+  const scoreSaude = Math.max(0, 100 - perdaTermografica);
+  const critical = all.filter(a => a.anomalia === 'open diode' || a.anomalia === 'multi hot-spot' || (a.delta||0) >= 20).length;
+  const affectedInvs = invStats.length;
+
+  // Render saude
+  const sc = document.getElementById('health-score');
+  sc.textContent = scoreSaude.toFixed(1);
+  sc.style.color = scoreSaude >= 97 ? '#10b981' : scoreSaude >= 92 ? '#f59e0b' : '#ef4444';
+  document.getElementById('health-label').textContent =
+    scoreSaude >= 97 ? 'Saudavel - so perdas sistemicas normais' :
+    scoreSaude >= 92 ? 'Atencao - perda termografica relevante' :
+    'Critico - intervencao necessaria';
+
+  document.getElementById('h-loss').innerHTML =
+    '<span style="color:#ef4444">-' + perdaTermografica.toFixed(2) + '%</span>' +
+    '<div style="font-size:10px;opacity:0.5;margin-top:2px">termografica corrigivel</div>';
+  document.getElementById('h-anom').textContent = all.length;
+  document.getElementById('h-sev').textContent = critical;
+  document.getElementById('h-affected').textContent = affectedInvs;
+
+  // Render Skids
+  const sg = document.getElementById('skid-grid');
+  skidStats.sort((a,b) => b.loss - a.loss);
+  sg.innerHTML = skidStats.map(s => {
+    const cls = classifyImpact(s.loss);
+    return '<div class="skid-card ' + cls + '">' +
+      '<div class="name">' + s.skid + '</div>' +
+      '<div style="opacity:0.7;font-size:13px">Score: <b style="color:' + (cls==='high'?'#ef4444':cls==='med'?'#f59e0b':'#10b981') + '">' + (100-s.loss).toFixed(1) + '/100</b></div>' +
+      '<div class="stats">' +
+        '<div class="stat-mini"><div class="v">-' + s.loss.toFixed(1) + '%</div><div class="l">Perda estimada</div></div>' +
+        '<div class="stat-mini"><div class="v">' + s.anomalias_count + '</div><div class="l">Anomalias</div></div>' +
+        '<div class="stat-mini"><div class="v">' + s.invs_count + '</div><div class="l">Inversores afetados</div></div>' +
+      '</div>' +
+      '</div>';
+  }).join('');
+
+  // Render Inversores (top)
+  const ic = document.getElementById('inv-impact');
+  invStats.sort((a,b) => b.loss - a.loss);
+  const maxInvLoss = Math.max(...invStats.map(i=>i.loss), 1);
+  ic.innerHTML = invStats.slice(0, 15).map(i => {
+    const cls = classifyImpact(i.loss);
+    const color = cls==='high'?'#ef4444':cls==='med'?'#f59e0b':'#10b981';
+    const w = (i.loss / maxInvLoss * 100).toFixed(0);
+    const mmTag = i.loss_mismatch > 0.3 ? ' <span style="color:#f59e0b;font-size:10px;font-weight:600" title="Perda extra por mismatch entre strings no MPPT">+' + i.loss_mismatch.toFixed(1) + '% MM</span>' : '';
+    return '<div class="impact-bar-row">' +
+      '<div class="name">' + i.inversor + mmTag + '</div>' +
+      '<div class="bar-bg"><div class="bar-fill" style="width:' + w + '%;background:' + color + '"></div></div>' +
+      '<div class="count">' + i.count + ' anom.</div>' +
+      '<div class="impact" style="color:' + color + '">-' + i.loss.toFixed(1) + '%</div>' +
+    '</div>';
+  }).join('') || '<div style="opacity:0.5;text-align:center;padding:20px">Sem dados</div>';
+
+  // Render Strings (top)
+  const sc2 = document.getElementById('str-impact');
+  stringStats.sort((a,b) => b.loss - a.loss);
+  const maxStrLoss = Math.max(...stringStats.map(s=>s.loss), 1);
+  // Loss diagram - mostra todas as perdas
+  const ld = document.getElementById('loss-diagram');
+  const itensPerda = [
+    { nome: 'Anomalias termicas detectadas', valor: perdaTermografica, cor: '#ef4444', tipo: 'termografica' },
+    { nome: 'Derating termico (silicio)', valor: PERDAS_SISTEMICAS.derating_temp, cor: '#f59e0b', tipo: 'sistemica' },
+    { nome: 'Eficiencia do inversor', valor: PERDAS_SISTEMICAS.eficiencia_inv, cor: '#94a3b8', tipo: 'sistemica' },
+    { nome: 'Soiling geral (sujidade media)', valor: PERDAS_SISTEMICAS.soiling_geral, cor: '#94a3b8', tipo: 'sistemica' },
+    { nome: 'Reflexao / IAM', valor: PERDAS_SISTEMICAS.reflexao, cor: '#94a3b8', tipo: 'sistemica' },
+    { nome: 'Mismatch fabricacao (base)', valor: PERDAS_SISTEMICAS.mismatch_base, cor: '#94a3b8', tipo: 'sistemica' },
+    { nome: 'Cabeamento DC', valor: PERDAS_SISTEMICAS.cabeamento_dc, cor: '#94a3b8', tipo: 'sistemica' },
+    { nome: 'Cabeamento AC', valor: PERDAS_SISTEMICAS.cabeamento_ac, cor: '#94a3b8', tipo: 'sistemica' },
+    { nome: 'Disponibilidade (downtime)', valor: PERDAS_SISTEMICAS.disponibilidade, cor: '#94a3b8', tipo: 'sistemica' }
+  ];
+  const maxV = Math.max(...itensPerda.map(i=>i.valor));
+  ld.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">' +
+      '<div style="background:#0f172a;padding:16px;border-radius:8px;border-left:4px solid #ef4444">' +
+        '<div style="font-size:11px;opacity:0.7;text-transform:uppercase">Termografica (corrigivel)</div>' +
+        '<div style="font-size:28px;font-weight:700;color:#ef4444">-' + perdaTermografica.toFixed(2) + '%</div>' +
+        '<div style="font-size:11px;opacity:0.6">Anomalias detectadas em modulos</div>' +
+      '</div>' +
+      '<div style="background:#0f172a;padding:16px;border-radius:8px;border-left:4px solid #94a3b8">' +
+        '<div style="font-size:11px;opacity:0.7;text-transform:uppercase">Sistemica (esperada)</div>' +
+        '<div style="font-size:28px;font-weight:700;color:#94a3b8">-' + perdaSistemica.toFixed(2) + '%</div>' +
+        '<div style="font-size:11px;opacity:0.6">Perdas inerentes ao sistema</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="background:#0f172a;padding:14px;border-radius:8px;margin-bottom:16px;text-align:center">' +
+      '<div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:1px">Performance Ratio (PR) Esperado</div>' +
+      '<div style="font-size:36px;font-weight:800;color:' + (prEsperado>=85?'#10b981':prEsperado>=78?'#f59e0b':'#ef4444') + '">' + prEsperado.toFixed(1) + '%</div>' +
+      '<div style="font-size:11px;opacity:0.6">100% - perda total estimada</div>' +
+    '</div>' +
+    itensPerda.map(it => {
+      const w = (it.valor / maxV * 100).toFixed(0);
+      const tag = it.tipo === 'termografica' ? '<span style="background:#ef4444;color:white;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">CORRIGIVEL</span>' : '';
+      return '<div class="impact-bar-row" style="grid-template-columns:280px 1fr 70px">' +
+        '<div class="name">' + it.nome + ' ' + tag + '</div>' +
+        '<div class="bar-bg"><div class="bar-fill" style="width:' + w + '%;background:' + it.cor + '"></div></div>' +
+        '<div class="impact" style="color:' + it.cor + '">-' + it.valor.toFixed(2) + '%</div>' +
+      '</div>';
+    }).join('');
+
+    sc2.innerHTML = stringStats.slice(0, 15).map(s => {
+    const cls = classifyImpact(s.loss);
+    const color = cls==='high'?'#ef4444':cls==='med'?'#f59e0b':'#10b981';
+    const w = (s.loss / maxStrLoss * 100).toFixed(0);
+    return '<div class="impact-bar-row">' +
+      '<div class="name" style="font-family:monospace;font-size:11px">' + s.string + '</div>' +
+      '<div class="bar-bg"><div class="bar-fill" style="width:' + w + '%;background:' + color + '"></div></div>' +
+      '<div class="count">' + s.count + ' anom.</div>' +
+      '<div class="impact" style="color:' + color + '">-' + s.loss.toFixed(1) + '%</div>' +
+    '</div>';
+  }).join('') || '<div style="opacity:0.5;text-align:center;padding:20px">Sem dados</div>';
+}
+
+
+
+// ============ CORRECOES DE CAMPO ============
+let chartCampoTipos = null, chartCampoInv = null;
+
+function normalizeStatus(s) {
+  if (!s) return '_vazio';
+  return String(s).trim().toLowerCase()
+    .replace(/[áàâã]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i')
+    .replace(/[óôõ]/g,'o').replace(/[úû]/g,'u').replace(/ç/g,'c');
+}
+
+function statusColor(s) {
+  const n = normalizeStatus(s);
+  if (n.includes('resolv')) return '#10b981';
+  if (n.includes('andament')) return '#06b6d4';
+  if (n.includes('pendent')) return '#f59e0b';
+  if (n.includes('nao procede') || n.includes('improc')) return '#94a3b8';
+  return '#475569';
+}
+
+function statusLabel(s) {
+  const n = normalizeStatus(s);
+  if (n === '_vazio') return 'Sem status';
+  if (n.includes('resolv')) return 'Resolvido';
+  if (n.includes('andament')) return 'Em andamento';
+  if (n.includes('pendent')) return 'Pendente';
+  if (n.includes('nao procede') || n.includes('improc')) return 'Nao procede';
+  return s;
+}
+
+function renderCampo() {
+  if (!usinaAtual) return;
+  const all = usinaAtual.anomalias;
+
+  // KPIs
+  const buckets = { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0, vazio: 0 };
+  all.forEach(a => {
+    const n = normalizeStatus(a.status);
+    if (n.includes('resolv')) buckets.resolvido++;
+    else if (n.includes('andament')) buckets.andamento++;
+    else if (n.includes('pendent')) buckets.pendente++;
+    else if (n.includes('nao procede') || n.includes('improc')) buckets.naoprocede++;
+    else buckets.vazio++;
+  });
+  const total = all.length;
+  const tratados = buckets.resolvido + buckets.naoprocede;
+  const pct = total ? (tratados / total * 100).toFixed(1) : 0;
+
+  document.getElementById('campo-progress').innerHTML =
+    '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">' +
+      '<div class="health-card" style="padding:20px;margin:0;text-align:left">' +
+        '<div class="label" style="margin:0">Progresso</div>' +
+        '<div style="font-size:42px;font-weight:800;color:' + (pct>=80?'#10b981':pct>=40?'#f59e0b':'#ef4444') + '">' + pct + '%</div>' +
+        '<div style="background:#0f172a;border-radius:8px;overflow:hidden;height:14px;margin-top:8px">' +
+          '<div style="width:' + pct + '%;background:linear-gradient(to right,#10b981,#06b6d4);height:100%"></div>' +
+        '</div>' +
+        '<div style="font-size:12px;opacity:0.6;margin-top:6px">' + tratados + ' tratadas de ' + total + '</div>' +
+      '</div>' +
+      '<div class="stat ok" style="margin:0"><div class="label">Resolvidas</div><div class="value">' + buckets.resolvido + '</div></div>' +
+      '<div class="stat" style="margin:0;border-left-color:#06b6d4"><div class="label">Em andamento</div><div class="value">' + buckets.andamento + '</div></div>' +
+      '<div class="stat warn" style="margin:0"><div class="label">Pendentes</div><div class="value">' + buckets.pendente + '</div></div>' +
+      '<div class="stat" style="margin:0;border-left-color:#94a3b8"><div class="label">Nao procede</div><div class="value">' + buckets.naoprocede + '</div></div>' +
+    '</div>' +
+    (buckets.vazio > 0 ? '<div style="background:#0f172a;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0.7">Ainda <b>' + buckets.vazio + '</b> anomalias sem status preenchido pela equipe.</div>' : '');
+
+  // Chart Status por Tipo
+  const tipos = {};
+  all.forEach(a => {
+    const t = a.anomalia || '?';
+    tipos[t] = tipos[t] || { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0, vazio: 0 };
+    const n = normalizeStatus(a.status);
+    if (n.includes('resolv')) tipos[t].resolvido++;
+    else if (n.includes('andament')) tipos[t].andamento++;
+    else if (n.includes('pendent')) tipos[t].pendente++;
+    else if (n.includes('nao procede') || n.includes('improc')) tipos[t].naoprocede++;
+    else tipos[t].vazio++;
+  });
+  if (chartCampoTipos) chartCampoTipos.destroy();
+  chartCampoTipos = new Chart(document.getElementById('chartCampoTipos'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(tipos),
+      datasets: [
+        { label: 'Resolvidas', data: Object.values(tipos).map(v=>v.resolvido), backgroundColor: '#10b981' },
+        { label: 'Em andamento', data: Object.values(tipos).map(v=>v.andamento), backgroundColor: '#06b6d4' },
+        { label: 'Pendente', data: Object.values(tipos).map(v=>v.pendente), backgroundColor: '#f59e0b' },
+        { label: 'Nao procede', data: Object.values(tipos).map(v=>v.naoprocede), backgroundColor: '#94a3b8' },
+        { label: 'Sem status', data: Object.values(tipos).map(v=>v.vazio), backgroundColor: '#475569' }
+      ]
+    },
+    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }}}}, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true }}, maintainAspectRatio: false }
+  });
+
+  // Chart Status por Inversor
+  const invs = {};
+  all.forEach(a => {
+    const t = a.inversor || '?';
+    invs[t] = invs[t] || { resolvido: 0, andamento: 0, pendente: 0, naoprocede: 0, vazio: 0 };
+    const n = normalizeStatus(a.status);
+    if (n.includes('resolv')) invs[t].resolvido++;
+    else if (n.includes('andament')) invs[t].andamento++;
+    else if (n.includes('pendent')) invs[t].pendente++;
+    else if (n.includes('nao procede') || n.includes('improc')) invs[t].naoprocede++;
+    else invs[t].vazio++;
+  });
+  const sortedInvKeys = Object.keys(invs).sort((a,b) => Object.values(invs[b]).reduce((s,v)=>s+v,0) - Object.values(invs[a]).reduce((s,v)=>s+v,0)).slice(0, 12);
+  if (chartCampoInv) chartCampoInv.destroy();
+  chartCampoInv = new Chart(document.getElementById('chartCampoInv'), {
+    type: 'bar',
+    data: {
+      labels: sortedInvKeys,
+      datasets: [
+        { label: 'Resolvidas', data: sortedInvKeys.map(k=>invs[k].resolvido), backgroundColor: '#10b981' },
+        { label: 'Em andamento', data: sortedInvKeys.map(k=>invs[k].andamento), backgroundColor: '#06b6d4' },
+        { label: 'Pendente', data: sortedInvKeys.map(k=>invs[k].pendente), backgroundColor: '#f59e0b' },
+        { label: 'Nao procede', data: sortedInvKeys.map(k=>invs[k].naoprocede), backgroundColor: '#94a3b8' },
+        { label: 'Sem status', data: sortedInvKeys.map(k=>invs[k].vazio), backgroundColor: '#475569' }
+      ]
+    },
+    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }}}}, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true }}, maintainAspectRatio: false }
+  });
+
+  // Tabela
+  renderCampoTable();
+}
+
+function renderCampoTable() {
+  if (!usinaAtual) return;
+  const filt = document.getElementById('f-campo-status').value;
+  const filtered = usinaAtual.anomalias.filter(a => {
+    if (!filt) return true;
+    const n = normalizeStatus(a.status);
+    if (filt === '_vazio') return n === '_vazio';
+    if (filt === 'resolvido') return n.includes('resolv');
+    if (filt === 'em andamento') return n.includes('andament');
+    if (filt === 'pendente') return n.includes('pendent');
+    if (filt === 'nao procede') return n.includes('nao procede') || n.includes('improc');
+    return true;
+  });
+  document.getElementById('campo-tbody').innerHTML = filtered.map(a => {
+    const cor = statusColor(a.status);
+    return '<tr>' +
+      '<td><b>' + a.id + '</b></td>' +
+      '<td>' + (a.anomalia||'') + '</td>' +
+      '<td>' + (a.modulo||'') + '</td>' +
+      '<td class="mono" style="font-size:11px">' + (a.string||'') + '</td>' +
+      '<td>' + (a.inversor||'') + '</td>' +
+      '<td>' + (a.skid||'') + '</td>' +
+      '<td>' + (a.delta!=null?a.delta.toFixed(1):'') + '</td>' +
+      '<td><span style="background:' + cor + ';color:#fff;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600">' + statusLabel(a.status) + '</span></td>' +
+      '<td class="mono" style="font-size:11px">' + (a.data_correcao||'') + '</td>' +
+      '<td style="font-size:12px;max-width:300px;white-space:normal">' + (a.problema||'') + '</td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="10" style="text-align:center;padding:20px;opacity:0.5">Sem registros</td></tr>';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('f-campo-status').addEventListener('change', renderCampoTable);
+  document.getElementById('btn-refresh-campo').addEventListener('click', () => {
+    document.getElementById('btn-add').click();
+  });
+});
+
+// Hook: anomalias resolvidas devem ser excluidas dos calculos de perda
+const _origRenderPerformance = renderPerformance;
+renderPerformance = function() {
+  if (!usinaAtual) return;
+  const original = usinaAtual.anomalias;
+  const ativas = original.filter(a => {
+    const n = normalizeStatus(a.status);
+    return !n.includes('resolv') && !n.includes('nao procede') && !n.includes('improc');
+  });
+  usinaAtual.anomalias = ativas;
+  _origRenderPerformance();
+  usinaAtual.anomalias = original;
+  // Adiciona aviso no topo se houver resolvidas
+  const resolvidas = original.length - ativas.length;
+  if (resolvidas > 0) {
+    const lc = document.querySelector('#tab-performance .health-card');
+    if (lc && !lc.querySelector('.resolved-note')) {
+      const note = document.createElement('div');
+      note.className = 'resolved-note';
+      note.style.cssText = 'background:rgba(16,185,129,0.15);border:1px solid #10b981;padding:10px;border-radius:8px;margin-top:16px;font-size:13px;color:#10b981';
+      note.innerHTML = '<b>' + resolvidas + ' anomalia(s) resolvidas/improcedentes</b> foram excluidas deste calculo';
+      lc.appendChild(note);
+    }
+  }
+};
+
+// Hook: o mapa pinta verde resolvidas e cinza nao procede
+const _origRenderMap = renderMap;
+renderMap = function() {
+  _origRenderMap();
+  // Repinta marcadores conforme status (depois do render padrao)
+  if (!markersCluster) return;
+  setTimeout(() => {
+    markersCluster.eachLayer(layer => {
+      // Encontra a anomalia correspondente pelo lat/lng
+      const ll = layer.getLatLng();
+      const a = filtered.find(x => x.lat === ll.lat && x.lng === ll.lng);
+      if (!a || !a.status) return;
+      const n = normalizeStatus(a.status);
+      if (n.includes('resolv')) layer.setStyle({ fillColor: '#10b981', color: '#10b981' });
+      else if (n.includes('nao procede') || n.includes('improc')) layer.setStyle({ fillColor: '#94a3b8', color: '#94a3b8' });
+    });
+  }, 100);
+};
+
+
+init();
+</script>
+</body>
+</html>
+t
