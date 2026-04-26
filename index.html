@@ -10,7 +10,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.5; }
@@ -210,11 +209,7 @@ function aplicarPapel() {
     actions.insertBefore(info, actions.firstChild);
   }
 
-  // Esconde botao "Adicionar Usina" para visualizadores
-  if (user.papel === 'viewer') {
-    const addBtn = document.getElementById('btn-add');
-    if (addBtn) addBtn.style.display = 'none';
-  }
+  // Botao Adicionar Usina foi removido (sync automatico do Sheets)
 }
 
 // Verifica login ao carregar
@@ -254,11 +249,10 @@ if (location.protocol === 'file:') {
     <p id="hdr-sub">Inspeção termográfica por drone</p>
   </div>
   <div class="actions">
-    <span id="sync-status" style="font-size:11px;opacity:0.85;display:flex;align-items:center;gap:6px" title="Status do auto-sync com Google Sheets"></span>
+    <span id="sync-status" style="font-size:11px;opacity:0.85;display:flex;align-items:center;gap:6px" title="Sync automatico a cada 1 minuto com Google Sheets"></span>
     <button id="btn-sync" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.4);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px" title="Recarregar do Google Sheets">Atualizar</button>
     <select id="usina-select" title="Selecionar usina"></select>
-    <button id="btn-add">+ Adicionar Usina</button>
-  </div>
+    </div>
 </header>
 
 <div class="tabs">
@@ -484,7 +478,7 @@ if (location.protocol === 'file:') {
     <div class="formula-note">
       <b>1.</b> A planilha tem agora duas abas: <code>usina2_anomalias_v1</code> (anomalias detectadas) e <code>Equipe Campo</code> (controle de execucao).<br>
       <b>2.</b> A equipe de campo preenche na aba <b>Equipe Campo</b> as colunas: <b>Status</b> (Resolvido / Em andamento / Pendente / Nao procede), <b>Data da Correcao</b> e <b>Problema Identificado</b>.<br>
-      <b>3.</b> Quando voce sobe a planilha atualizada (botao <b>+ Adicionar Usina</b> -> seleciona a mesma usina pra sobrescrever), o site le as duas abas e merge os status nas anomalias.<br>
+      <b>3.</b> O site puxa a planilha automaticamente do Google Sheets <b>a cada 1 minuto</b>. Para forcar atualizacao agora, clique no botao <b>Atualizar</b> no canto superior direito.<br>
       <b>4.</b> Anomalias <b>Resolvidas</b> sao excluidas dos calculos de perda na aba Performance, refletindo a melhoria na usina.<br>
       <b>5.</b> O mapa marca em <b>verde</b> as resolvidas e em <b>cinza</b> as Nao procede.
     </div>
@@ -494,27 +488,6 @@ if (location.protocol === 'file:') {
 <footer>
   Dashboard gerado a partir de planilhas de inspeção termográfica · <span id="footer-info"></span>
 </footer>
-
-<!-- Modal -->
-<div class="modal-bg" id="modal">
-  <div class="modal">
-    <h2>+ Adicionar Nova Usina</h2>
-    <p>Nome da usina:</p>
-    <input type="text" id="m-nome" placeholder="ex: UFV Sol do Sertão">
-    <p>Arraste o arquivo .xlsx da inspeção:</p>
-    <div class="drop-zone" id="drop">
-      <div style="font-size:48px; margin-bottom:8px">📊</div>
-      <div><b>Arraste aqui</b> ou <u>clique pra selecionar</u></div>
-      <div style="font-size:12px; opacity:0.6; margin-top:8px">Colunas esperadas: ID, FileName, Foto, Anomalies, Module, String, Tracker, Inverter, Skid, X, Y, TempMax, TempMin, Delta, Latitude, Longitude</div>
-      <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
-    </div>
-    <div id="m-preview"></div>
-    <div class="actions">
-      <button class="secondary" id="m-cancel">Cancelar</button>
-      <button class="primary" id="m-save" disabled>Baixar JSON atualizado</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // ============ CONFIGURACAO GOOGLE SHEETS (auto-sync) ============
@@ -529,7 +502,7 @@ const SHEETS_CONFIG = {
 };
 
 // Auto-refresh em ms (0 = desativado). Padrao: 5 minutos.
-const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const AUTO_REFRESH_MS = 60 * 1000;  // 1 minuto - sempre atualizado
 
 const ANOMALIA_CLASS = { 'hot-spot':'hot-spot','multi hot-spot':'multi','shadow':'shadow','open diode':'diode','dirty module':'dirty' };
 const ANOMALIA_COLOR = { 'hot-spot':'#f59e0b','multi hot-spot':'#ef4444','shadow':'#6366f1','open diode':'#ec4899','dirty module':'#84cc16' };
@@ -562,7 +535,7 @@ async function init() {
   }
 
   if (!DB.usinas || !DB.usinas.length) {
-    alert('Nenhuma usina cadastrada. Use o botao "+ Adicionar Usina".');
+    console.warn('Nenhuma usina cadastrada.');
     return;
   }
 
@@ -581,7 +554,7 @@ async function init() {
     setInterval(sincronizarComSheets, AUTO_REFRESH_MS);
   }
   if (!DB.usinas || !DB.usinas.length) {
-    alert('Nenhuma usina cadastrada. Use "+ Adicionar Usina".');
+    console.warn('Nenhuma usina cadastrada.');
     return;
   }
   popularUsinaSelect();
@@ -655,7 +628,7 @@ async function sincronizarComSheets() {
   // Verifica se ha pelo menos uma usina com config
   const temConfig = DB.usinas.some(u => SHEETS_CONFIG[u.id]);
   if (!temConfig) {
-    setSyncStatus('off', 'Sem auto-sync configurado');
+    setSyncStatus('off', 'Sync nao disponivel');
     return;
   }
 
@@ -739,7 +712,7 @@ async function sincronizarComSheets() {
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     setSyncStatus('ok', 'Atualizado ' + hora + ' (' + totalSynced + ')');
   } else {
-    setSyncStatus('off', 'Sem auto-sync configurado');
+    setSyncStatus('off', 'Sync nao disponivel');
   }
 
   // Re-render
@@ -1056,13 +1029,6 @@ function renderAll() { renderStats(); renderMap(); renderCharts(); renderTable()
 
 function initModal() {
   const modal = document.getElementById('modal');
-  document.getElementById('btn-add').addEventListener('click', () => {
-    document.getElementById('m-nome').value = '';
-    document.getElementById('m-preview').innerHTML = '';
-    document.getElementById('m-save').disabled = true;
-    novaUsinaPendente = null;
-    modal.classList.add('show');
-  });
   document.getElementById('m-cancel').addEventListener('click', () => modal.classList.remove('show'));
   modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
 
@@ -1096,88 +1062,7 @@ function initModal() {
   });
 }
 
-function processarArquivo(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
-      // Aba 1: anomalias
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-      const anomalias = rows.filter(r => r['ID'] != null).map(r => ({
-        id: Number(r['ID']),
-        filename: r['FileName'], foto: r['Foto'], anomalia: r['Anomalies'],
-        modulo: r['Module'], string: r['String'], tracker: r['Tracker'],
-        inversor: r['Inverter'], skid: r['Skid'],
-        x: r['X'], y: r['Y'],
-        temp_max: r['TempMax'], temp_min: r['TempMin'], delta: r['Delta'],
-        lat: r['Latitude'], lng: r['Longitude'],
-        status: null, data_correcao: null, problema: null
-      }));
-
-      // Aba 2: Equipe Campo (busca por nome contendo "campo" ou "equipe")
-      let campoSheet = null;
-      for (const sn of wb.SheetNames) {
-        if (/equipe|campo/i.test(sn)) { campoSheet = wb.Sheets[sn]; break; }
-      }
-      if (campoSheet) {
-        const campoRows = XLSX.utils.sheet_to_json(campoSheet, { defval: null });
-        const byId = {};
-        anomalias.forEach(a => byId[a.id] = a);
-        let merged = 0;
-        campoRows.forEach(r => {
-          const id = Number(r['ID']);
-          const a = byId[id];
-          if (!a) return;
-          // Procura colunas com nome flexivel (com/sem espaco extra)
-          for (const k in r) {
-            const kl = k.trim().toLowerCase();
-            if (kl === 'status') a.status = r[k];
-            else if (kl.startsWith('data')) {
-              if (r[k] instanceof Date) a.data_correcao = r[k].toISOString().slice(0,10);
-              else if (typeof r[k] === 'number') {
-                // Excel date serial
-                const d = new Date((r[k] - 25569) * 86400 * 1000);
-                a.data_correcao = d.toISOString().slice(0,10);
-              } else a.data_correcao = r[k];
-            }
-            else if (kl.startsWith('problema')) a.problema = r[k];
-          }
-          if (a.status || a.data_correcao || a.problema) merged++;
-        });
-        console.log('Equipe Campo: ' + merged + ' anomalias com dados de campo');
-      }
-
-      // Preserva foto_url/foto_thumb se ja existem (vindo do Drive)
-      if (usinaAtual && novaUsinaPendenteSobreescrever) {
-        const oldById = {};
-        usinaAtual.anomalias.forEach(a => oldById[a.id] = a);
-        anomalias.forEach(a => {
-          const old = oldById[a.id];
-          if (old) {
-            if (old.foto_url) a.foto_url = old.foto_url;
-            if (old.foto_thumb) a.foto_thumb = old.foto_thumb;
-            if (old.foto_id) a.foto_id = old.foto_id;
-          }
-        });
-      }
-
-      novaUsinaPendente = anomalias;
-      const tipos = {};
-      anomalias.forEach(a => tipos[a.anomalia] = (tipos[a.anomalia]||0)+1);
-      document.getElementById('m-preview').innerHTML = `
-        <div class="preview">
-          <b>${anomalias.length} anomalias detectadas</b><br>
-          ${Object.entries(tipos).map(([k,v])=>`${k}: ${v}`).join(' · ')}
-        </div>`;
-      document.getElementById('m-save').disabled = false;
-    } catch (err) {
-      document.getElementById('m-preview').innerHTML =
-        `<div class="preview" style="color:#ef4444">Erro: ${err.message}</div>`;
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
+function processarArquivo(file) { /* removido - sync automatico do Sheets */ }
 
 
 // ============ TABS ============
@@ -1644,7 +1529,7 @@ function renderCampoTable() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-campo-status').addEventListener('change', renderCampoTable);
   document.getElementById('btn-refresh-campo').addEventListener('click', () => {
-    document.getElementById('btn-add').click();
+    sincronizarComSheets();
   });
 });
 
