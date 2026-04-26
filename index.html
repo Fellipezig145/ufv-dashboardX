@@ -878,21 +878,25 @@ function aplicarFiltros() {
 }
 
 function initMap() {
-  // maxZoom reduzido para 19 - alem disso Google tambem pode dar 404 em area rural
-  map = L.map('map', { preferCanvas: true, maxZoom: 19, minZoom: 12 }).setView([-20.520, -49.330], 17);
+  // Aumenta zoom para 22; tiles nativos param em N nativeZoom e o Leaflet faz upscale
+  // (evita 404 e ainda permite "zoom de aproximacao")
+  map = L.map('map', { preferCanvas: true, maxZoom: 22, minZoom: 10 }).setView([-20.520, -49.330], 17);
+
+  const errorTile = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzJlMzg0OCIvPjwvc3ZnPg==';
 
   const googleSat = L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
     subdomains: ['0','1','2','3'],
     attribution: 'Google Maps',
-    maxZoom: 19,
-    maxNativeZoom: 19,
-    errorTileUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgZmlsbD0iIzJlMzg0OCIvPjwvc3ZnPg=='
+    maxZoom: 22,
+    maxNativeZoom: 20,
+    errorTileUrl: errorTile
   });
 
   const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Esri',
-    maxZoom: 19,
-    maxNativeZoom: 18
+    maxZoom: 22,
+    maxNativeZoom: 18,
+    errorTileUrl: errorTile
   });
 
   // Tenta Google primeiro; se mais de 3 tiles falharem, troca para Esri automatico
@@ -919,7 +923,7 @@ function initMap() {
     maxClusterRadius: 30,
     spiderfyOnMaxZoom: true,
     showCoverageOnHover: false,
-    disableClusteringAtZoom: 19
+    disableClusteringAtZoom: 20
   });
   map.addLayer(markersCluster);
   setTimeout(() => map.invalidateSize(), 200);
@@ -957,7 +961,7 @@ function renderMap() {
     markersCluster.addLayer(marker);
     markerById[d.id] = marker;
   });
-  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 19 });
   document.getElementById('map-count').textContent = `(${filtered.length} pontos)`;
 }
 
@@ -1072,7 +1076,7 @@ function renderTable() {
       if (m) {
         markersCluster.zoomToShowLayer(m, () => {
           m.openPopup();
-          map.setView(m.getLatLng(), 19);
+          map.setView(m.getLatLng(), 21);
         });
         document.querySelectorAll('tbody tr').forEach(t => t.classList.remove('selected'));
         tr.classList.add('selected');
