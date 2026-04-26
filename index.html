@@ -150,6 +150,54 @@
   .logout-btn { background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
   .logout-btn:hover { background: rgba(255,255,255,0.25); }
 
+
+  /* CSS Variables - Tema (default escuro) */
+  :root, [data-theme="dark"] {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --card-hover: #334155;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --border: #334155;
+    --input-bg: #0f172a;
+    --header-grad: linear-gradient(135deg, #1e40af, #0891b2);
+  }
+  [data-theme="light"] {
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --card-hover: #f1f5f9;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --border: #cbd5e1;
+    --input-bg: #f8fafc;
+    --header-grad: linear-gradient(135deg, #1e40af, #0891b2);
+  }
+  body { background: var(--bg); color: var(--text); }
+  .stat, .card, .modal { background: var(--card); }
+  .stat .label, th, .card h2, .filters label { color: var(--text-muted); }
+  .filters select, .filters input, .modal input[type="text"] { background: var(--input-bg); color: var(--text); border-color: var(--border); }
+  td { border-bottom-color: var(--border); }
+  thead { background: var(--input-bg); }
+  tbody tr:hover { background: var(--card-hover); }
+  header { background: var(--header-grad); }
+  .formula-note, .preview { background: var(--input-bg); color: var(--text); }
+  [data-theme="light"] .leaflet-popup-content-wrapper { background: #ffffff; color: #1e293b; }
+  [data-theme="light"] .leaflet-popup-tip { background: #ffffff; }
+  [data-theme="light"] .popup-title { border-bottom-color: #cbd5e1; }
+  [data-theme="light"] .popup-row .k { color: #64748b; }
+  [data-theme="light"] .health-card { background: linear-gradient(135deg, #ffffff, #f1f5f9); border-color: #cbd5e1; }
+  [data-theme="light"] .impact-bar-row .bar-bg, [data-theme="light"] .skid-card { background: #f1f5f9; }
+  [data-theme="light"] .skid-card { background: #ffffff; }
+  [data-theme="light"] .tabs { background: #ffffff; border-bottom-color: #cbd5e1; }
+  [data-theme="light"] .tab { color: #64748b; }
+  [data-theme="light"] .tab.active { background: rgba(6,182,212,0.08); }
+  [data-theme="light"] .table-wrap { background: #ffffff; }
+  [data-theme="light"] .badge.hot-spot { background: #fbbf24; color: #1e293b; }
+  [data-theme="light"] header { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+  .theme-toggle { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: #fff; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+  .theme-toggle:hover { background: rgba(255,255,255,0.3); }
+
 </style>
 </head>
 <body>
@@ -249,6 +297,7 @@ if (location.protocol === 'file:') {
     <p id="hdr-sub">Inspeção termográfica por drone</p>
   </div>
   <div class="actions">
+    <button class="theme-toggle" id="btn-theme" title="Alternar tema (escuro/claro)">🌙</button>
     <span id="sync-status" style="font-size:11px;opacity:0.85;display:flex;align-items:center;gap:6px" title="Sync automatico a cada 1 minuto com Google Sheets"></span>
     <button id="btn-sync" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.4);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px" title="Recarregar do Google Sheets">Atualizar</button>
     <select id="usina-select" title="Selecionar usina"></select>
@@ -931,8 +980,14 @@ function initMap() {
 
 function popupHtml(d) {
   const cls = ANOMALIA_CLASS[d.anomalia] || '';
+  const sN = (typeof normalizeStatus === 'function') ? normalizeStatus(d.status) : 'pendente';
+  const sCor = sN.includes('resolv') ? '#10b981' :
+               sN.includes('andament') ? '#06b6d4' :
+               (sN.includes('nao procede')||sN.includes('improc')) ? '#94a3b8' : '#f59e0b';
+  const sTxt = (typeof statusLabel === 'function') ? statusLabel(d.status) : (d.status||'Pendente');
   return `
     <div class="popup-title"><span class="badge ${cls}">${d.anomalia||''}</span> &nbsp;ID ${d.id}</div>
+    <div class="popup-row"><span class="k">Status</span><span class="v"><span style="background:${sCor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">${sTxt}</span></span></div>
     <div class="popup-row"><span class="k">Módulo</span><span class="v">${d.modulo||'—'}</span></div>
     <div class="popup-row"><span class="k">String</span><span class="v mono">${d.string||'—'}</span></div>
     <div class="popup-row"><span class="k">Tracker</span><span class="v">${d.tracker||'—'}</span></div>
@@ -1796,6 +1851,70 @@ const _origRenderPerf2 = renderPerformance;
 renderPerformance = function() {
   _origRenderPerf2();
   setTimeout(calcularImpactoGeracao, 100);
+};
+
+
+
+// ============ THEME TOGGLE ============
+function aplicarTema() {
+  const tema = localStorage.getItem('ufv-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', tema);
+  const btn = document.getElementById('btn-theme');
+  if (btn) btn.textContent = tema === 'dark' ? '☀' : '🌙';
+
+  // Atualiza cores dos charts
+  Chart.defaults.color = tema === 'dark' ? '#94a3b8' : '#475569';
+  Chart.defaults.borderColor = tema === 'dark' ? '#334155' : '#cbd5e1';
+  // Re-render charts ativos
+  if (usinaAtual) {
+    setTimeout(() => {
+      if (typeof renderCharts === 'function') renderCharts();
+      if (typeof renderPerformance === 'function' && document.querySelector('.tab[data-tab="performance"]').classList.contains('active')) renderPerformance();
+      if (typeof renderCampo === 'function' && document.querySelector('.tab[data-tab="campo"]').classList.contains('active')) renderCampo();
+    }, 50);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  aplicarTema();
+  document.getElementById('btn-theme').addEventListener('click', () => {
+    const atual = localStorage.getItem('ufv-theme') || 'dark';
+    localStorage.setItem('ufv-theme', atual === 'dark' ? 'light' : 'dark');
+    aplicarTema();
+  });
+});
+
+// ============ INTERATIVIDADE DOS GRAFICOS ============
+// Quando clicar numa barra/slice de grafico na Visao Geral, aplica filtro automatico
+function tornarGraficoClicavel(chart, tipoFiltro) {
+  if (!chart) return;
+  chart.options.onClick = (event, elements) => {
+    if (!elements.length) return;
+    const idx = elements[0].index;
+    const label = chart.data.labels[idx];
+    const filtroEl = document.getElementById('f-' + tipoFiltro);
+    if (filtroEl) {
+      filtroEl.value = label;
+      aplicarFiltros();
+      // Scroll suave pro topo da Visao Geral
+      document.querySelector('.stats-grid').scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+  chart.options.onHover = (event, elements) => {
+    event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+  };
+  chart.update();
+}
+
+// Hook nos render charts da Visao Geral pra adicionar interatividade
+const _origRenderCharts = renderCharts;
+renderCharts = function() {
+  _origRenderCharts();
+  setTimeout(() => {
+    tornarGraficoClicavel(chartTipos, 'anomalia');
+    tornarGraficoClicavel(chartSkids, 'skid');
+    tornarGraficoClicavel(chartInv, 'inversor');
+  }, 50);
 };
 
 
