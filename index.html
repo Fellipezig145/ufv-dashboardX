@@ -457,10 +457,22 @@ async function init() {
     DB = JSON.parse(JSON.stringify(EMBEDDED_DB));
   }
 
-  // 2. Para cada usina com SHEETS_CONFIG, tenta atualizar do Sheets
+  if (!DB.usinas || !DB.usinas.length) {
+    alert('Nenhuma usina cadastrada. Use o botao "+ Adicionar Usina".');
+    return;
+  }
+
+  // 2. Inicializa UI (mapa, filtros, modal) ANTES de qualquer render
+  popularUsinaSelect();
+  initMap();
+  initFiltros();
+  initModal();
+  selecionarUsina(DB.usinas[0].id);
+
+  // 3. Tenta sincronizar com Sheets (se falhar, segue com embedded)
   await sincronizarComSheets();
 
-  // 3. Inicia auto-refresh
+  // 4. Inicia auto-refresh
   if (AUTO_REFRESH_MS > 0) {
     setInterval(sincronizarComSheets, AUTO_REFRESH_MS);
   }
@@ -761,10 +773,12 @@ function aplicarFiltros() {
 }
 
 function initMap() {
-  map = L.map('map', { preferCanvas: true, maxZoom: 22 }).setView([-20.520, -49.330], 17);
-  L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-    subdomains: ['0','1','2','3'],
-    attribution: '© Google', maxZoom: 22
+  map = L.map('map', { preferCanvas: true, maxZoom: 21 }).setView([-20.520, -49.330], 17);
+  // Esri World Imagery - confiavel em qualquer host (https://github.io etc)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Esri, Maxar, Earthstar Geographics',
+    maxZoom: 21,
+    maxNativeZoom: 19
   }).addTo(map);
   markersCluster = L.markerClusterGroup({
     maxClusterRadius: 30,
@@ -773,6 +787,8 @@ function initMap() {
     disableClusteringAtZoom: 19
   });
   map.addLayer(markersCluster);
+  // Garante que o mapa redimensione corretamente apos primeiro render
+  setTimeout(() => map.invalidateSize(), 200);
 }
 
 function popupHtml(d) {
