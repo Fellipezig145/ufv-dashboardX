@@ -2693,7 +2693,7 @@ function visualizarOS(numero) {
           '<b>String:</b> ' + (a.string || '-') + '<br>' +
           '<b>Modulo:</b> ' + (a.modulo || '-') + '<br>' +
           (mapsLink ? '<a href="' + mapsLink + '" target="_blank" style="color:#1e40af;font-weight:600;display:inline-block;margin-top:8px">Abrir no Google Maps -></a><br>' : '') +
-          '<span style="font-size:11px;font-family:monospace;color:#666">GPS: ' + (a.lat||'').toFixed ? a.lat.toFixed(6) : a.lat + ', ' + ((a.lng||'').toFixed ? a.lng.toFixed(6) : a.lng) + '</span>' +
+          '<span style="font-size:11px;font-family:monospace;color:#666">GPS: ' + (a.lat ? a.lat.toFixed(6) : '?') + ', ' + (a.lng ? a.lng.toFixed(6) : '?') + '</span>' +
         '</div>' +
       '</div>' +
       '<div style="background:#fee2e2;padding:14px;border-radius:6px;border-left:4px solid #ef4444">' +
