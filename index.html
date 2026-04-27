@@ -310,6 +310,7 @@ if (location.protocol === 'file:') {
   <div class="tab" data-tab="campo">Correcoes de Campo</div>
   <div class="tab" data-tab="detalhes">Detalhes Corrigidos</div>
   <div class="tab" data-tab="qgis">Mapa QGIS</div>
+  <div class="tab" data-tab="os">Ordens de Servico</div>
 </div>
 
 <div class="container">
@@ -679,6 +680,89 @@ if (location.protocol === 'file:') {
     </div>
   </div>
 </div>
+
+<div class="tab-content" id="tab-os">
+  <div class="card" style="margin-bottom:24px">
+    <h2>Ordens de Servico</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px" id="os-resumo"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Anomalias para Atender (gerar OS)</h2>
+      <div class="filters" style="margin-bottom:12px">
+        <label>Tipo:</label>
+        <select id="f-os-tipo"><option value="">Todos</option></select>
+        <label>Inversor:</label>
+        <select id="f-os-inversor"><option value="">Todos</option></select>
+        <label>Min DT:</label>
+        <input id="f-os-delta" type="number" step="0.5" placeholder="0" style="width:70px">
+        <label><input type="checkbox" id="f-os-criticas-only"> So criticas (DT>=20)</label>
+      </div>
+      <div class="table-wrap" style="max-height:500px">
+        <table>
+          <thead><tr><th>ID</th><th>Tipo</th><th>Skid</th><th>Inv</th><th>String</th><th>Mod</th><th>DT</th><th>Acao</th></tr></thead>
+          <tbody id="os-anomalias-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>OS Geradas</h2>
+      <div class="filters" style="margin-bottom:12px">
+        <input type="text" id="f-os-busca" placeholder="Buscar por numero OS, ID, etc..." style="flex:1;min-width:200px">
+        <button id="exportar-todas-os" style="background:#10b981;color:#fff">Exportar todas</button>
+      </div>
+      <div class="table-wrap" style="max-height:500px">
+        <table>
+          <thead><tr><th>Nº OS</th><th>ID Anom</th><th>Tipo</th><th>Skid</th><th>Data</th><th>Acoes</th></tr></thead>
+          <tbody id="os-geradas-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: gerar OS -->
+<div class="modal-bg" id="modal-os">
+  <div class="modal" style="max-width:520px">
+    <h2>Gerar Ordem de Servico</h2>
+    <p>Anomalia <b id="modal-os-anom"></b></p>
+    <label style="display:block;font-size:12px;opacity:0.7;text-transform:uppercase;margin-top:16px">Numero da OS (enviado pelo cliente)</label>
+    <input type="text" id="modal-os-numero" placeholder="ex: OS-2026-04-001" style="width:100%;background:#0f172a;color:#fff;border:1px solid #334155;padding:12px;border-radius:8px;font-size:15px;margin-top:6px">
+    <label style="display:block;font-size:12px;opacity:0.7;text-transform:uppercase;margin-top:16px">Equipe responsavel (opcional)</label>
+    <input type="text" id="modal-os-equipe" placeholder="ex: Equipe Alpha" style="width:100%;background:#0f172a;color:#fff;border:1px solid #334155;padding:12px;border-radius:8px;font-size:15px;margin-top:6px">
+    <label style="display:block;font-size:12px;opacity:0.7;text-transform:uppercase;margin-top:16px">Prazo (opcional)</label>
+    <input type="date" id="modal-os-prazo" style="width:100%;background:#0f172a;color:#fff;border:1px solid #334155;padding:12px;border-radius:8px;font-size:15px;margin-top:6px">
+    <div class="actions">
+      <button class="secondary" id="modal-os-cancel">Cancelar</button>
+      <button class="primary" id="modal-os-gerar">Gerar OS</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: visualizar OS -->
+<div class="modal-bg" id="modal-os-view">
+  <div class="modal" style="max-width:760px;max-height:90vh;overflow:auto">
+    <div id="os-content" style="background:#fff;color:#0f172a;padding:32px;border-radius:8px;font-family:Arial,sans-serif"></div>
+    <div class="actions" style="margin-top:16px">
+      <button class="secondary" id="modal-os-fechar">Fechar</button>
+      <button class="primary" id="modal-os-imprimir" style="background:#06b6d4">Imprimir / PDF</button>
+      <button class="primary" id="modal-os-deletar" style="background:#ef4444">Deletar OS</button>
+    </div>
+  </div>
+</div>
+
+<style>
+@media print {
+  body * { visibility: hidden !important; }
+  #os-content, #os-content * { visibility: visible !important; }
+  #os-content { position: absolute; left: 0; top: 0; width: 100% !important; padding: 20px !important; background: #fff !important; color: #000 !important; box-shadow: none !important; }
+  .modal-bg { background: #fff !important; }
+  .modal { box-shadow: none !important; padding: 0 !important; max-width: none !important; }
+  .actions, .modal h2 { display: none !important; }
+}
+</style>
 
 <footer>
   Dashboard gerado a partir de planilhas de inspeção termográfica · <span id="footer-info"></span>
@@ -2088,8 +2172,8 @@ function initQgisMap() {
   qgisAnomaliasLayer = L.layerGroup().addTo(mapQgis);
   renderQgisAnomalias();
 
-  // Fit bounds
-  mapQgis.fitBounds(qgisLimiteLayer.getBounds(), { padding: [40,40] });
+  // Fit bounds - foca no limite da usina com padding pequeno (zoom mais perto)
+  mapQgis.fitBounds(qgisLimiteLayer.getBounds(), { padding: [10,10], maxZoom: 18 });
 
   // Coordenadas do mouse
   mapQgis.on('mousemove', e => {
@@ -2171,6 +2255,8 @@ _origTabHandler.forEach(tab => {
           mapQgis.invalidateSize();
           renderQgisAnomalias();
           calcularResumoQgis();
+          // Re-enquadra no limite ao reabrir
+          if (qgisLimiteLayer) mapQgis.fitBounds(qgisLimiteLayer.getBounds(), { padding: [10,10], maxZoom: 18 });
         }
       }, 100);
     }
@@ -2409,6 +2495,397 @@ renderDetalhes = function() {
     });
   });
 };
+
+
+
+// ============ ABA ORDENS DE SERVICO ============
+
+// Procedimentos por tipo de anomalia (passo-a-passo IEC TS 62446-3)
+const PROCEDIMENTOS = {
+  'hot-spot': {
+    causa: 'Aquecimento localizado em uma celula. Geralmente causado por sujidade pontual, sombreamento parcial ou microcrack na celula.',
+    epis: ['Oculos de protecao UV', 'Luvas isolantes Classe 0 (1000V)', 'Calcado de seguranca', 'Capacete'],
+    ferramentas: ['Camera termografica', 'Multimetro DC', 'Pano microfibra + agua desmineralizada', 'String monitor'],
+    seguranca: 'IMPORTANTE: Aproveitar dia nublado ou cobrir o modulo com lona opaca antes de manipular conexoes. Nao desconectar conectores MC4 sob carga.',
+    passos: [
+      'Localizar o modulo via coordenadas GPS no campo (link no cabecalho)',
+      'Confirmar visualmente o numero do modulo na string',
+      'Inspecao visual: checar sujidade, sombras, danos fisicos no vidro/EVA',
+      'Realizar limpeza com pano microfibra umido (sem jato dagua)',
+      'Aguardar 5-10 min e refazer leitura termografica local',
+      'Se DT permanecer >10C: medir Voc e Isc do modulo isolado',
+      'Comparar com datasheet (tolerancia +/- 5%)',
+      'Se fora da tolerancia: substituir o modulo (ver kit reserva)',
+      'Anotar S/N antigo e novo na planilha Equipe Campo',
+      'Marcar Status="Resolvido" + Data + Atividade na planilha'
+    ]
+  },
+  'multi hot-spot': {
+    causa: 'Multiplas celulas aquecidas, indica problema serio: PID, microcracks generalizados, falha do encapsulamento, ou diodo bypass parcialmente acionado.',
+    epis: ['Oculos de protecao UV', 'Luvas isolantes Classe 0 (1000V)', 'Calcado de seguranca', 'Capacete', 'Cinto de seguranca se trabalho em altura'],
+    ferramentas: ['Camera termografica', 'Multimetro DC + pinca amperimetrica DC', 'Tracador curva I-V', 'String monitor', 'Modulo reserva'],
+    seguranca: 'CRITICO: Cobrir modulo com lona opaca antes de desconectar. Tensoes elevadas podem ocorrer. Verificar isolacao com megohmetro antes de manipular.',
+    passos: [
+      'Localizar modulo via GPS (link no cabecalho)',
+      'Confirmar numero do modulo e contar celulas afetadas',
+      'Inspecao visual: procurar trincas no vidro, descoloracao, snail trails',
+      'Cobrir modulo com lona opaca',
+      'Desconectar conectores MC4 (sempre cobertos)',
+      'Medir Voc do modulo: comparar com datasheet',
+      'Conectar tracador I-V e gerar curva',
+      'Se curva mostrar degraus pronunciados: diodo bypass acionado -> SUBSTITUIR modulo',
+      'Se Voc reduzido >10%: PID confirmado -> SUBSTITUIR modulo',
+      'Instalar modulo reserva (mesma potencia, tolerancia)',
+      'Reapertar conectores MC4 com torque 1.5 N.m',
+      'Anotar S/N antigo e novo + foto do problema',
+      'Atualizar planilha: Status="Resolvido", Atividade="Substituicao"'
+    ]
+  },
+  'shadow': {
+    causa: 'Sombreamento parcial - geralmente causado por vegetacao, estrutura proxima, sujidade pesada ou objeto estranho sobre o modulo.',
+    epis: ['Oculos de protecao', 'Luvas de raspa', 'Calcado de seguranca'],
+    ferramentas: ['Camera termografica', 'Tesoura/foice para podar', 'Pano microfibra + escova macia + agua', 'EPI completo se altura'],
+    seguranca: 'Cuidado com poda de vegetacao proxima a strings - nao deixar galhos cairem sobre modulos.',
+    passos: [
+      'Localizar via GPS (link no cabecalho)',
+      'Identificar a fonte da sombra: vegetacao, estrutura, sujidade ou objeto',
+      'Se vegetacao: podar a planta gerando a sombra (corte rente)',
+      'Se sujidade pontual: limpar com pano microfibra umido',
+      'Se objeto: remover (tomar cuidado com superficie do modulo)',
+      'Se sombra estrutural permanente: anotar para revisao de projeto',
+      'Refazer termografia local apos 10 min',
+      'Documentar com foto antes/depois',
+      'Marcar Status na planilha (Resolvido ou Pendente se for projeto)'
+    ]
+  },
+  'open diode': {
+    causa: 'Diodo de bypass interno acionado permanentemente - 1/3 do modulo isolado eletricamente. Modulo perde ~33% de potencia.',
+    epis: ['Oculos de protecao UV', 'Luvas isolantes Classe 0', 'Calcado de seguranca', 'Capacete'],
+    ferramentas: ['Multimetro DC', 'Tracador I-V', 'Modulo reserva', 'Chave torquimetrica para MC4'],
+    seguranca: 'CRITICO: Cobrir modulo antes de desconectar. Diodo defeituoso pode gerar arco eletrico.',
+    passos: [
+      'Localizar via GPS (link no cabecalho)',
+      'Confirmar modulo na string fisicamente',
+      'Cobrir modulo com lona opaca',
+      'Desconectar conectores MC4',
+      'Medir Voc: deve estar ~33% abaixo do nominal',
+      'Confirma diagnostico: diodo bypass acionado',
+      'NAO existe reparo - modulo deve ser SUBSTITUIDO',
+      'Verificar se garantia ainda esta vigente (geralmente 12 anos para defeitos)',
+      'Instalar modulo reserva',
+      'Reapertar MC4 com torque 1.5 N.m',
+      'Documentar S/N antigo (para garantia) e novo',
+      'Atualizar planilha: Status="Resolvido", Atividade="Substituicao"'
+    ]
+  },
+  'dirty module': {
+    causa: 'Sujidade no modulo (poeira, fezes de aves, fungos). Reduz transmissao luminosa e gera aquecimento gradiente.',
+    epis: ['Oculos de protecao', 'Luvas de borracha', 'Calcado de seguranca'],
+    ferramentas: ['Pano microfibra', 'Escova macia (NUNCA dura)', 'Agua desmineralizada', 'Sabao neutro PH 7'],
+    seguranca: 'NUNCA limpar com sol forte (choque termico pode rachar vidro). Preferir manha cedo ou final de tarde. NUNCA usar jato de alta pressao.',
+    passos: [
+      'Localizar via GPS (link no cabecalho)',
+      'Aguardar modulo esfriar (manha cedo ou final de tarde)',
+      'Aplicar agua desmineralizada com pano umido',
+      'Se sujeira pesada: usar sabao neutro diluido',
+      'Esfregar suavemente com pano microfibra (movimentos circulares)',
+      'NUNCA usar escova dura, esponja abrasiva ou jato de pressao',
+      'Enxaguar com agua limpa',
+      'Secar naturalmente (nao usar pano seco para evitar microriscos)',
+      'Refazer termografia para confirmar resolucao',
+      'Atualizar planilha: Status="Resolvido", Atividade="Reparo no modulo"'
+    ]
+  }
+};
+const PROCEDIMENTO_DEFAULT = {
+  causa: 'Anomalia detectada por termografia.',
+  epis: ['EPIs basicos para trabalho em UFV'],
+  ferramentas: ['Camera termografica', 'Multimetro'],
+  seguranca: 'Seguir procedimentos padrao de seguranca em UFV.',
+  passos: [
+    'Localizar via GPS', 'Inspecao visual', 'Avaliar e corrigir', 'Atualizar planilha'
+  ]
+};
+
+// Storage de OS no localStorage
+const OS_STORAGE_KEY = 'ufv-ordens-servico';
+function getOSList() {
+  try { return JSON.parse(localStorage.getItem(OS_STORAGE_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveOSList(list) {
+  localStorage.setItem(OS_STORAGE_KEY, JSON.stringify(list));
+}
+
+let anomSelecionadaParaOS = null;
+
+function abrirModalOS(anomaliaId) {
+  const a = usinaAtual.anomalias.find(x => x.id === anomaliaId);
+  if (!a) return;
+  anomSelecionadaParaOS = a;
+  document.getElementById('modal-os-anom').textContent =
+    'ID ' + a.id + ' - ' + a.anomalia + ' (' + a.skid + ', ' + a.inversor + ', ' + a.string + ', mod ' + a.modulo + ')';
+  document.getElementById('modal-os-numero').value = '';
+  document.getElementById('modal-os-equipe').value = '';
+  document.getElementById('modal-os-prazo').value = '';
+  document.getElementById('modal-os').classList.add('show');
+  setTimeout(() => document.getElementById('modal-os-numero').focus(), 100);
+}
+
+function gerarOS() {
+  const numero = document.getElementById('modal-os-numero').value.trim();
+  if (!numero) { alert('Numero da OS obrigatorio'); return; }
+  const equipe = document.getElementById('modal-os-equipe').value.trim();
+  const prazo = document.getElementById('modal-os-prazo').value;
+  const a = anomSelecionadaParaOS;
+
+  const lista = getOSList();
+  // Verifica se ja existe OS com esse numero
+  if (lista.some(o => o.numero === numero)) {
+    if (!confirm('Ja existe OS com numero ' + numero + '. Sobrescrever?')) return;
+  }
+  const filtered = lista.filter(o => o.numero !== numero);
+  filtered.push({
+    numero, equipe, prazo,
+    anomaliaId: a.id,
+    dataGeracao: new Date().toISOString(),
+    usinaId: usinaAtual.id, usinaNome: usinaAtual.nome,
+    snapshot: { ...a }  // congela dados da anomalia no momento da OS
+  });
+  saveOSList(filtered);
+
+  document.getElementById('modal-os').classList.remove('show');
+  renderOS();
+  // Abre direto a OS recem-gerada
+  visualizarOS(numero);
+}
+
+function visualizarOS(numero) {
+  const os = getOSList().find(o => o.numero === numero);
+  if (!os) return;
+  const a = os.snapshot;
+  const proc = PROCEDIMENTOS[a.anomalia] || PROCEDIMENTO_DEFAULT;
+  const mapsLink = a.lat && a.lng ? 'https://www.google.com/maps/search/?api=1&query=' + a.lat + ',' + a.lng : null;
+  const dataGer = new Date(os.dataGeracao).toLocaleString('pt-BR');
+
+  document.getElementById('os-content').innerHTML =
+    '<div style="border-bottom:3px solid #1e40af;padding-bottom:16px;margin-bottom:20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap">' +
+        '<div>' +
+          '<h1 style="font-size:24px;color:#1e40af;margin:0">ORDEM DE SERVICO</h1>' +
+          '<div style="font-size:14px;color:#666;margin-top:4px">' + (os.usinaNome || '') + ' - Inspecao Termografica</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:12px;color:#666">N OS</div>' +
+          '<div style="font-size:22px;font-weight:bold;color:#1e40af">' + os.numero + '</div>' +
+          '<div style="font-size:11px;color:#666;margin-top:4px">Gerada em: ' + dataGer + '</div>' +
+          (os.prazo ? '<div style="font-size:11px;color:#666">Prazo: ' + new Date(os.prazo).toLocaleDateString("pt-BR") + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">' +
+      '<div style="background:#f1f5f9;padding:14px;border-radius:6px">' +
+        '<div style="font-size:11px;color:#666;text-transform:uppercase;font-weight:600">LOCALIZACAO NO CAMPO</div>' +
+        '<div style="margin-top:8px;line-height:1.8">' +
+          '<b>SKID:</b> ' + (a.skid || '-') + '<br>' +
+          '<b>Inversor:</b> ' + (a.inversor || '-') + '<br>' +
+          '<b>Tracker:</b> ' + (a.tracker || '-') + '<br>' +
+          '<b>String:</b> ' + (a.string || '-') + '<br>' +
+          '<b>Modulo:</b> ' + (a.modulo || '-') + '<br>' +
+          (mapsLink ? '<a href="' + mapsLink + '" target="_blank" style="color:#1e40af;font-weight:600;display:inline-block;margin-top:8px">Abrir no Google Maps -></a><br>' : '') +
+          '<span style="font-size:11px;font-family:monospace;color:#666">GPS: ' + (a.lat||'').toFixed ? a.lat.toFixed(6) : a.lat + ', ' + ((a.lng||'').toFixed ? a.lng.toFixed(6) : a.lng) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="background:#fee2e2;padding:14px;border-radius:6px;border-left:4px solid #ef4444">' +
+        '<div style="font-size:11px;color:#666;text-transform:uppercase;font-weight:600">ANOMALIA DETECTADA</div>' +
+        '<div style="margin-top:8px;line-height:1.8">' +
+          '<b>Tipo:</b> <span style="background:#ef4444;color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600">' + a.anomalia + '</span><br>' +
+          '<b>T.Max:</b> ' + (a.temp_max || '-') + ' C<br>' +
+          '<b>T.Min:</b> ' + (a.temp_min || '-') + ' C<br>' +
+          '<b>DT (gradiente):</b> <span style="color:' + ((a.delta||0)>=20?'#ef4444':(a.delta||0)>=10?'#f59e0b':'#10b981') + ';font-weight:bold">' + (a.delta || '-') + ' C</span><br>' +
+          '<b>Severidade:</b> ' + ((a.delta||0)>=20?'CRITICA':(a.delta||0)>=10?'MODERADA':'BAIXA') + '<br>' +
+          (a.foto_url ? '<a href="' + a.foto_url + '" target="_blank" style="color:#1e40af;font-weight:600;display:inline-block;margin-top:8px">Ver foto termografica -></a>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="background:#fef3c7;padding:14px;border-radius:6px;margin-bottom:20px;border-left:4px solid #f59e0b">' +
+      '<b style="color:#92400e">CAUSA PROVAVEL:</b> ' + proc.causa +
+    '</div>' +
+
+    '<div style="background:#fee2e2;padding:14px;border-radius:6px;margin-bottom:20px;border-left:4px solid #ef4444">' +
+      '<b style="color:#991b1b">SEGURANCA:</b> ' + proc.seguranca +
+    '</div>' +
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">' +
+      '<div>' +
+        '<h3 style="color:#1e40af;font-size:14px;border-bottom:2px solid #1e40af;padding-bottom:4px">EPIs OBRIGATORIOS</h3>' +
+        '<ul style="margin-top:8px;padding-left:20px">' + proc.epis.map(e=>'<li>'+e+'</li>').join('') + '</ul>' +
+      '</div>' +
+      '<div>' +
+        '<h3 style="color:#1e40af;font-size:14px;border-bottom:2px solid #1e40af;padding-bottom:4px">FERRAMENTAS</h3>' +
+        '<ul style="margin-top:8px;padding-left:20px">' + proc.ferramentas.map(e=>'<li>'+e+'</li>').join('') + '</ul>' +
+      '</div>' +
+    '</div>' +
+
+    '<h3 style="color:#1e40af;font-size:14px;border-bottom:2px solid #1e40af;padding-bottom:4px">PROCEDIMENTO PASSO-A-PASSO</h3>' +
+    '<ol style="margin-top:8px;padding-left:20px;line-height:1.8">' +
+      proc.passos.map(p => '<li style="margin-bottom:6px"><span style="display:inline-block;border:1px solid #999;width:14px;height:14px;margin-right:8px;vertical-align:middle"></span>' + p + '</li>').join('') +
+    '</ol>' +
+
+    '<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ccc">' +
+      '<h3 style="color:#1e40af;font-size:14px">EXECUCAO (preencher em campo)</h3>' +
+      '<table style="width:100%;border-collapse:collapse;margin-top:8px">' +
+        '<tr><td style="padding:6px;border:1px solid #ccc;width:40%"><b>Equipe:</b></td><td style="padding:6px;border:1px solid #ccc">' + (os.equipe || '___________________________') + '</td></tr>' +
+        '<tr><td style="padding:6px;border:1px solid #ccc"><b>Data execucao:</b></td><td style="padding:6px;border:1px solid #ccc">___ / ___ / ______</td></tr>' +
+        '<tr><td style="padding:6px;border:1px solid #ccc"><b>Atividade realizada:</b></td><td style="padding:6px;border:1px solid #ccc">[ ] Reparo no modulo &nbsp; [ ] Substituicao</td></tr>' +
+        '<tr><td style="padding:6px;border:1px solid #ccc"><b>S/N modulo antigo:</b></td><td style="padding:6px;border:1px solid #ccc">___________________________</td></tr>' +
+        '<tr><td style="padding:6px;border:1px solid #ccc"><b>S/N modulo novo:</b></td><td style="padding:6px;border:1px solid #ccc">___________________________</td></tr>' +
+        '<tr><td style="padding:6px;border:1px solid #ccc"><b>DT apos correcao:</b></td><td style="padding:6px;border:1px solid #ccc">_______ C</td></tr>' +
+        '<tr><td style="padding:6px;border:1px solid #ccc"><b>Observacoes:</b></td><td style="padding:6px;border:1px solid #ccc;height:60px"></td></tr>' +
+      '</table>' +
+      '<div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:32px">' +
+        '<div style="text-align:center"><div style="border-bottom:1px solid #000;height:40px"></div><div style="font-size:11px;margin-top:4px">Tecnico responsavel</div></div>' +
+        '<div style="text-align:center"><div style="border-bottom:1px solid #000;height:40px"></div><div style="font-size:11px;margin-top:4px">Supervisor / Cliente</div></div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ccc;font-size:10px;color:#666;text-align:center">' +
+      'Documento gerado automaticamente pelo Dashboard ' + (os.usinaNome || '') + ' em ' + dataGer +
+    '</div>';
+
+  // Configura botoes do modal
+  document.getElementById('modal-os-imprimir').onclick = () => window.print();
+  document.getElementById('modal-os-deletar').onclick = () => {
+    if (confirm('Deletar OS ' + numero + '?')) {
+      saveOSList(getOSList().filter(o => o.numero !== numero));
+      document.getElementById('modal-os-view').classList.remove('show');
+      renderOS();
+    }
+  };
+  document.getElementById('modal-os-view').classList.add('show');
+}
+
+function renderOS() {
+  if (!usinaAtual) return;
+  const all = usinaAtual.anomalias;
+
+  // Popular filtros
+  const tipos = [...new Set(all.map(a => a.anomalia).filter(Boolean))].sort();
+  const invs = [...new Set(all.map(a => a.inversor).filter(Boolean))].sort();
+  const sT = document.getElementById('f-os-tipo');
+  const sI = document.getElementById('f-os-inversor');
+  const cur1 = sT.value, cur2 = sI.value;
+  sT.innerHTML = '<option value="">Todos</option>' + tipos.map(t=>'<option value="'+t+'">'+t+'</option>').join('');
+  sI.innerHTML = '<option value="">Todos</option>' + invs.map(i=>'<option value="'+i+'">'+i+'</option>').join('');
+  sT.value = cur1; sI.value = cur2;
+
+  const lista = getOSList();
+  const idsComOS = new Set(lista.filter(o => o.usinaId === usinaAtual.id).map(o => o.anomaliaId));
+
+  // Aplicar filtros nas anomalias
+  const fT = sT.value, fI = sI.value;
+  const fD = parseFloat(document.getElementById('f-os-delta').value) || 0;
+  const soCriticas = document.getElementById('f-os-criticas-only').checked;
+  const filt = all.filter(a => {
+    if (fT && a.anomalia !== fT) return false;
+    if (fI && a.inversor !== fI) return false;
+    if ((a.delta||0) < fD) return false;
+    if (soCriticas && (a.delta||0) < 20) return false;
+    // Nao mostra anomalias ja resolvidas/improcedentes
+    const n = normalizeStatus(a.status);
+    if (n.includes('resolv') || n.includes('improc') || n.includes('nao procede')) return false;
+    return true;
+  });
+
+  // Resumo
+  const totalAnomalias = all.length;
+  const numOSGeradas = lista.filter(o => o.usinaId === usinaAtual.id).length;
+  const pendentes = filt.length;
+  document.getElementById('os-resumo').innerHTML =
+    '<div class="stat" style="margin:0"><div class="label">Total anomalias</div><div class="value">'+totalAnomalias+'</div></div>' +
+    '<div class="stat warn" style="margin:0"><div class="label">Pendentes (sem OS)</div><div class="value">'+(pendentes - [...filt].filter(a=>idsComOS.has(a.id)).length)+'</div></div>' +
+    '<div class="stat" style="margin:0;border-left-color:#06b6d4"><div class="label">OS geradas</div><div class="value">'+numOSGeradas+'</div></div>' +
+    '<div class="stat ok" style="margin:0"><div class="label">Anom. resolvidas</div><div class="value">'+all.filter(a=>normalizeStatus(a.status).includes("resolv")).length+'</div></div>';
+
+  // Tabela anomalias
+  document.getElementById('os-anomalias-tbody').innerHTML = filt.length ?
+    filt.sort((a,b) => (b.delta||0) - (a.delta||0)).map(a => {
+      const cls = ANOMALIA_CLASS[a.anomalia] || '';
+      const temOS = idsComOS.has(a.id);
+      return '<tr>' +
+        '<td><b>'+a.id+'</b></td>' +
+        '<td><span class="badge '+cls+'" style="font-size:10px">'+a.anomalia+'</span></td>' +
+        '<td style="font-size:11px">'+(a.skid||'-')+'</td>' +
+        '<td style="font-size:11px">'+(a.inversor||'-')+'</td>' +
+        '<td style="font-size:10px;font-family:monospace">'+(a.string||'-')+'</td>' +
+        '<td>'+(a.modulo||'-')+'</td>' +
+        '<td style="color:'+((a.delta||0)>=20?'#ef4444':(a.delta||0)>=10?'#f59e0b':'#10b981')+';font-weight:600">'+(a.delta||'-')+'</td>' +
+        '<td>' + (temOS
+          ? '<button onclick="visualizarOS(getOSList().find(o=>o.anomaliaId==='+a.id+').numero)" style="background:#06b6d4;color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">Ver OS</button>'
+          : '<button onclick="abrirModalOS('+a.id+')" style="background:#10b981;color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">+ Gerar OS</button>') +
+        '</td>' +
+      '</tr>';
+    }).join('') : '<tr><td colspan="8" style="text-align:center;padding:20px;opacity:0.5">Nenhuma anomalia atende os filtros</td></tr>';
+
+  // Tabela OS geradas
+  const buscaOS = (document.getElementById('f-os-busca').value || '').toLowerCase();
+  const osFiltradas = lista.filter(o => o.usinaId === usinaAtual.id && (
+    !buscaOS || o.numero.toLowerCase().includes(buscaOS) ||
+    String(o.anomaliaId).includes(buscaOS) ||
+    (o.equipe||'').toLowerCase().includes(buscaOS)
+  )).sort((a,b) => new Date(b.dataGeracao) - new Date(a.dataGeracao));
+
+  document.getElementById('os-geradas-tbody').innerHTML = osFiltradas.length ?
+    osFiltradas.map(o => {
+      const a = o.snapshot;
+      return '<tr style="cursor:pointer" onclick="visualizarOS(\''+o.numero+'\')">' +
+        '<td><b style="color:#06b6d4">'+o.numero+'</b></td>' +
+        '<td>'+o.anomaliaId+'</td>' +
+        '<td style="font-size:11px">'+a.anomalia+'</td>' +
+        '<td style="font-size:11px">'+(a.skid||'-')+'</td>' +
+        '<td style="font-size:11px">'+new Date(o.dataGeracao).toLocaleDateString('pt-BR')+'</td>' +
+        '<td><button onclick="event.stopPropagation();visualizarOS(\''+o.numero+'\')" style="background:#06b6d4;color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px">Abrir</button></td>' +
+      '</tr>';
+    }).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;opacity:0.5">Nenhuma OS gerada ainda</td></tr>';
+}
+
+// Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  ['f-os-tipo','f-os-inversor','f-os-delta','f-os-busca'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', renderOS);
+  });
+  const cb = document.getElementById('f-os-criticas-only');
+  if (cb) cb.addEventListener('change', renderOS);
+
+  const cancel = document.getElementById('modal-os-cancel');
+  if (cancel) cancel.addEventListener('click', () => document.getElementById('modal-os').classList.remove('show'));
+  const gerar = document.getElementById('modal-os-gerar');
+  if (gerar) gerar.addEventListener('click', gerarOS);
+  const fechar = document.getElementById('modal-os-fechar');
+  if (fechar) fechar.addEventListener('click', () => document.getElementById('modal-os-view').classList.remove('show'));
+
+  const exportarTodas = document.getElementById('exportar-todas-os');
+  if (exportarTodas) exportarTodas.addEventListener('click', () => {
+    const lista = getOSList().filter(o => o.usinaId === usinaAtual.id);
+    if (!lista.length) { alert('Nenhuma OS gerada'); return; }
+    const csv = 'numero;anomalia_id;tipo;skid;inversor;tracker;string;modulo;delta;equipe;prazo;data_geracao;lat;lng\n' +
+      lista.map(o => [o.numero, o.anomaliaId, o.snapshot.anomalia, o.snapshot.skid, o.snapshot.inversor, o.snapshot.tracker, o.snapshot.string, o.snapshot.modulo, o.snapshot.delta, o.equipe||'', o.prazo||'', o.dataGeracao, o.snapshot.lat, o.snapshot.lng].join(';')).join('\n');
+    const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'ordens_servico_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  });
+});
+
+// Hook tab change
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.dataset.tab === 'os') setTimeout(renderOS, 50);
+  });
+});
 
 
 init();
