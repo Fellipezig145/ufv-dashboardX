@@ -763,13 +763,32 @@ if (location.protocol === 'file:') {
 <script>
 // ============ CONFIGURACAO GOOGLE SHEETS (auto-sync) ============
 // Para conectar uma usina ao Google Sheets, preencha aqui:
+// Configuracao GLOBAL da planilha Google Sheets
+// A mesma planilha contem TODAS as usinas, diferenciadas pela coluna "UFV"
+const SHEETS_CONFIG_GLOBAL = {
+  sheetId: '1XK86NsxCx4_djNfpQp6DQueUgrm02iWFt8czGwq2dmg',
+  gidAnomalias: '761038550',
+  gidCampo: '137624344'
+};
+
+// Mapeamento: nome na planilha (coluna UFV) -> id da usina + nome amigavel
+const UFV_MAP = {
+  'nova granada 01': { id: 'nova-granada-1', nome: 'UFV Nova Granada 1' },
+  'nova granada 02': { id: 'nova-granada-2', nome: 'UFV Nova Granada 2' },
+  'nova granada 1':  { id: 'nova-granada-1', nome: 'UFV Nova Granada 1' },
+  'nova granada 2':  { id: 'nova-granada-2', nome: 'UFV Nova Granada 2' }
+};
+
+function normalizeUFVKey(s) {
+  if (!s) return null;
+  return String(s).trim().toLowerCase()
+    .replace(/^ufv\s+/, '').replace(/\s+/g, ' ');
+}
+
+// Compat: mantemos para o codigo legado funcionar (uma key por usina)
 const SHEETS_CONFIG = {
-  'nova-granada-2': {
-    sheetId: '1XK86NsxCx4_djNfpQp6DQueUgrm02iWFt8czGwq2dmg',
-    gidAnomalias: '761038550',
-    gidCampo: '137624344'
-  }
-  // Para adicionar outras usinas: 'id-da-usina': { sheetId, gidAnomalias, gidCampo }
+  'nova-granada-2': SHEETS_CONFIG_GLOBAL,
+  'nova-granada-1': SHEETS_CONFIG_GLOBAL
 };
 
 // Auto-refresh em ms (0 = desativado). Padrao: 5 minutos.
@@ -890,38 +909,51 @@ function setSyncStatus(state, msg) {
 }
 
 async function sincronizarComSheets() {
-  // Detecta file:// que nao consegue fazer fetch externo
   if (location.protocol === 'file:') {
     setSyncStatus('off', 'Auto-sync desativado (file://)');
     return;
   }
 
-  // Verifica se ha pelo menos uma usina com config
-  const temConfig = DB.usinas.some(u => SHEETS_CONFIG[u.id]);
-  if (!temConfig) {
-    setSyncStatus('off', 'Sync nao disponivel');
-    return;
-  }
-
-  let totalSynced = 0;
-  let qualquerErro = null;
   setSyncStatus('sync', 'Sincronizando...');
+  const cfg = SHEETS_CONFIG_GLOBAL;
+  const baseUrl = 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId + '/gviz/tq?tqx=out:csv&gid=';
+  const ts = Date.now();
 
-  for (const usina of DB.usinas) {
-    const cfg = SHEETS_CONFIG[usina.id];
-    if (!cfg) continue;
+  try {
+    const [csvAnom, csvCampo] = await Promise.all([
+      fetch(baseUrl + cfg.gidAnomalias + '&_=' + ts).then(r => { if(!r.ok) throw new Error('http '+r.status); return r.text(); }),
+      fetch(baseUrl + cfg.gidCampo + '&_=' + ts).then(r => { if(!r.ok) throw new Error('http '+r.status); return r.text(); })
+    ]);
 
-    try {
-      const baseUrl = 'https://docs.google.com/spreadsheets/d/' + cfg.sheetId + '/gviz/tq?tqx=out:csv&gid=';
-      const ts = Date.now();
-      const [csvAnom, csvCampo] = await Promise.all([
-        fetch(baseUrl + cfg.gidAnomalias + '&_=' + ts).then(r => { if(!r.ok) throw new Error('http '+r.status+' anomalias'); return r.text(); }),
-        fetch(baseUrl + cfg.gidCampo + '&_=' + ts).then(r => { if(!r.ok) throw new Error('http '+r.status+' campo'); return r.text(); })
-      ]);
+    const anomRows = csvToObjects(csvAnom);
 
-      // Parse anomalias
-      const anomRows = csvToObjects(csvAnom);
-      const novasAnomalias = anomRows.filter(r => r['ID']).map(r => ({
+    // Normaliza lat/lng (alguns campos vem sem ponto decimal, ex: -20554948 -> -20.554948)
+    function normalizeLat(v) {
+      const n = num(v); if (n == null) return null;
+      if (Math.abs(n) > 90) return n / 1000000;
+      return n;
+    }
+    function normalizeLng(v) {
+      const n = num(v); if (n == null) return null;
+      if (Math.abs(n) > 180) return n / 1000000;
+      return n;
+    }
+
+    // Agrupa anomalias por UFV
+    const anomaliasPorUFV = {};
+    anomRows.forEach(r => {
+      if (!r['ID']) return;
+      const ufvKey = normalizeUFVKey(r['UFV'] || r['Ufv'] || r['ufv']);
+      if (!ufvKey) return;
+      const ufvInfo = UFV_MAP[ufvKey];
+      if (!ufvInfo) {
+        // Cria entrada dinamica se for UFV nova nao mapeada
+        const id = ufvKey.replace(/[^a-z0-9]+/g,'-');
+        UFV_MAP[ufvKey] = { id, nome: 'UFV ' + ufvKey.replace(/\b\w/g, c => c.toUpperCase()) };
+      }
+      const info = UFV_MAP[ufvKey];
+      if (!anomaliasPorUFV[info.id]) anomaliasPorUFV[info.id] = { info, anomalias: [] };
+      anomaliasPorUFV[info.id].anomalias.push({
         id: parseInt(r['ID']),
         filename: r['FileName'] || null,
         foto: r['Foto'] || null,
@@ -931,71 +963,84 @@ async function sincronizarComSheets() {
         tracker: r['Tracker'] || null,
         inversor: r['Inverter'] || null,
         skid: r['Skid'] || null,
-        x: num(r['X']),
-        y: num(r['Y']),
+        x: num(r['X']), y: num(r['Y']),
         temp_max: num(r['TempMax']),
         temp_min: num(r['TempMin']),
         delta: num(r['Delta']),
-        lat: num(r['Latitude']),
-        lng: num(r['Longitude']),
-        status: null, data_correcao: null, problema: null
-      }));
+        lat: normalizeLat(r['Latitude']),
+        lng: normalizeLng(r['Longitude']),
+        status: null, data_correcao: null, problema: null,
+        equipe: null, atividade: null, sn_antigo: null, sn_novo: null
+      });
+    });
 
-      // Preserva foto_url/foto_thumb dos dados antigos
+    // Reconstroi DB.usinas baseado em UFV_MAP, preservando fotos dos dados antigos
+    const novaListaUsinas = [];
+    Object.entries(anomaliasPorUFV).forEach(([id, dataObj]) => {
+      const old = DB.usinas.find(u => u.id === id);
       const oldById = {};
-      usina.anomalias.forEach(a => oldById[a.id] = a);
-      novasAnomalias.forEach(a => {
-        const old = oldById[a.id];
-        if (old) {
-          if (old.foto_url) a.foto_url = old.foto_url;
-          if (old.foto_thumb) a.foto_thumb = old.foto_thumb;
-          if (old.foto_id) a.foto_id = old.foto_id;
+      if (old) old.anomalias.forEach(a => oldById[a.id] = a);
+
+      // Preserva foto_url etc das anomalias antigas
+      dataObj.anomalias.forEach(a => {
+        const o = oldById[a.id];
+        if (o) {
+          if (o.foto_url) a.foto_url = o.foto_url;
+          if (o.foto_thumb) a.foto_thumb = o.foto_thumb;
+          if (o.foto_id) a.foto_id = o.foto_id;
         }
       });
 
-      // Merge dados de Equipe Campo
-      const campoRows = csvToObjects(csvCampo);
-      const byId = {};
-      novasAnomalias.forEach(a => byId[a.id] = a);
-      campoRows.forEach(r => {
-        const id = parseInt(r['ID']);
-        const a = byId[id];
-        if (!a) return;
-        for (const k in r) {
-          const kl = k.trim().toLowerCase()
-            .replace(/[áàâã]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i')
-            .replace(/[óôõ]/g,'o').replace(/[úû]/g,'u').replace(/ç/g,'c');
-          if (kl === 'status') a.status = r[k] || null;
-          else if (kl.startsWith('data')) a.data_correcao = r[k] || null;
-          else if (kl.startsWith('problema')) a.problema = r[k] || null;
-          else if (kl.startsWith('equipe')) a.equipe = r[k] || null;
-          else if (kl.includes('atividade') || kl.includes('executada')) a.atividade = r[k] || null;
-          else if ((kl.includes('serie') || kl === 'sn' || kl.startsWith('sn ')) && (kl.includes('antig') || kl.includes('old'))) a.sn_antigo = r[k] || null;
-          else if ((kl.includes('serie') || kl === 'sn' || kl.startsWith('sn ')) && (kl.includes('nov') || kl.includes('new'))) a.sn_novo = r[k] || null;
-        }
+      novaListaUsinas.push({
+        id, nome: dataObj.info.nome,
+        data_inspecao: (old && old.data_inspecao) || new Date().toISOString().slice(0,10),
+        anomalias: dataObj.anomalias
       });
+    });
 
-      usina.anomalias = novasAnomalias;
-      totalSynced += novasAnomalias.length;
-    } catch (e) {
-      console.error('Erro sincronizando ' + usina.id + ':', e);
-      qualquerErro = e;
-    }
-  }
+    // Merge dados de Equipe Campo (todas as linhas, IDs sao globais)
+    const campoRows = csvToObjects(csvCampo);
+    // Cria mapa de ID -> anomalia (em qualquer usina)
+    const allById = {};
+    novaListaUsinas.forEach(u => u.anomalias.forEach(a => allById[a.id] = a));
 
-  if (qualquerErro) {
-    setSyncStatus('err', 'Erro: ' + qualquerErro.message);
-  } else if (totalSynced > 0) {
+    campoRows.forEach(r => {
+      const id = parseInt(r['ID']);
+      const a = allById[id];
+      if (!a) return;
+      for (const k in r) {
+        const kl = k.trim().toLowerCase()
+          .replace(/[áàâã]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i')
+          .replace(/[óôõ]/g,'o').replace(/[úû]/g,'u').replace(/ç/g,'c');
+        if (kl === 'status') a.status = r[k] || null;
+        else if (kl.startsWith('data')) a.data_correcao = r[k] || null;
+        else if (kl.startsWith('problema')) a.problema = r[k] || null;
+        else if (kl.startsWith('equipe')) a.equipe = r[k] || null;
+        else if (kl.includes('atividade') || kl.includes('executada')) a.atividade = r[k] || null;
+        // Modulo N Antigo / N Novo
+        else if ((kl.includes('modulo') || kl.includes('serie') || kl === 'sn') && (kl.includes('antig') || kl.includes('old'))) a.sn_antigo = r[k] || null;
+        else if ((kl.includes('modulo') || kl.includes('serie') || kl === 'sn') && (kl.includes('nov') || kl.includes('new'))) a.sn_novo = r[k] || null;
+      }
+    });
+
+    DB.usinas = novaListaUsinas;
+
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    setSyncStatus('ok', 'Atualizado ' + hora + ' (' + totalSynced + ')');
-  } else {
-    setSyncStatus('off', 'Sync nao disponivel');
+    const totalAnom = novaListaUsinas.reduce((s,u) => s + u.anomalias.length, 0);
+    setSyncStatus('ok', 'Atualizado ' + hora + ' (' + novaListaUsinas.length + ' usinas, ' + totalAnom + ' anomalias)');
+
+  } catch (e) {
+    console.error('Erro sync:', e);
+    setSyncStatus('err', 'Erro: ' + e.message);
+    return;
   }
 
   // Re-render
   if (usinaAtual) {
     const id = usinaAtual.id;
-    selecionarUsina(id);
+    const ainda = DB.usinas.find(u => u.id === id);
+    popularUsinaSelect();
+    selecionarUsina(ainda ? id : DB.usinas[0].id);
   } else if (DB.usinas.length) {
     popularUsinaSelect();
     selecionarUsina(DB.usinas[0].id);
